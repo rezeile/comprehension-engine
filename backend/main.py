@@ -14,7 +14,11 @@ app = FastAPI(title="Comprehension Engine API", version="1.0.0")
 # CORS middleware for frontend communication
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # React dev server
+    allow_origins=[
+        "http://localhost:3000",  # React dev server
+        "https://ai-tutor-frontend-ofkj3zd0b-rezeiles-projects.vercel.app",  # Vercel frontend
+        "https://*.vercel.app",  # All Vercel subdomains
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
