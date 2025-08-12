@@ -72,41 +72,80 @@ const ChatInterface: React.FC = () => {
       const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
       
-      recognitionRef.current.continuous = false;
+      recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
+      recognitionRef.current.maxAlternatives = 1;
       recognitionRef.current.lang = 'en-US';
 
       recognitionRef.current.onstart = () => {
-        // Only set recording state if manually activated
-        if (voiceState.manualActivation) {
-          setVoiceState(prev => ({ ...prev, isRecording: true }));
-        } else {
-          // If not manually activated, stop immediately
-          recognitionRef.current?.stop();
-        }
+        console.log('Speech recognition started');
+        setVoiceState(prev => ({ ...prev, isRecording: true }));
       };
 
       recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
-        // Only process results if manually activated
-        if (voiceState.manualActivation) {
-          const transcript = Array.from(event.results)
-            .map((result: SpeechRecognitionResult) => result[0]?.transcript || '')
-            .join('');
-          
-          setInputValue(transcript);
+        let finalTranscript = '';
+        let interimTranscript = '';
+        
+        // Process all results
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (result.isFinal) {
+            finalTranscript += result[0].transcript;
+          } else {
+            interimTranscript += result[0].transcript;
+          }
+        }
+        
+        // Update input with accumulated speech
+        if (finalTranscript) {
+          console.log('Final transcript:', finalTranscript);
+          setInputValue(prev => prev + ' ' + finalTranscript);
+        }
+        
+        // Show interim results in real-time (optional)
+        if (interimTranscript) {
+          console.log('Interim transcript:', interimTranscript);
         }
       };
 
       recognitionRef.current.onend = () => {
-        setVoiceState(prev => ({ ...prev, isRecording: false, manualActivation: false }));
+        console.log('Speech recognition ended');
+        
+        // If we're still supposed to be recording, restart automatically
+        if (voiceState.isRecording) {
+          console.log('Restarting speech recognition...');
+          try {
+            recognitionRef.current?.start();
+          } catch (error) {
+            console.error('Error restarting speech recognition:', error);
+            setVoiceState(prev => ({ ...prev, isRecording: false, manualActivation: false }));
+          }
+        } else {
+          setVoiceState(prev => ({ ...prev, isRecording: false, manualActivation: false }));
+        }
       };
 
       recognitionRef.current.onerror = (event: SpeechRecognitionError) => {
         console.error('Speech recognition error:', event.error);
-        setVoiceState(prev => ({ ...prev, isRecording: false, manualActivation: false }));
         
-        if (event.error === 'not-allowed') {
-          setVoiceState(prev => ({ ...prev, microphonePermission: 'denied' }));
+        // Don't stop recording for certain errors that are recoverable
+        if (event.error === 'no-speech' || event.error === 'audio-capture' || event.error === 'network') {
+          console.log('Recoverable error, attempting to restart...');
+          if (voiceState.isRecording) {
+            try {
+              recognitionRef.current?.start();
+            } catch (error) {
+              console.error('Error restarting after recoverable error:', error);
+              setVoiceState(prev => ({ ...prev, isRecording: false, manualActivation: false }));
+            }
+          }
+        } else {
+          // For non-recoverable errors, stop recording
+          setVoiceState(prev => ({ ...prev, isRecording: false, manualActivation: false }));
+          
+          if (event.error === 'not-allowed') {
+            setVoiceState(prev => ({ ...prev, microphonePermission: 'denied' }));
+          }
         }
       };
     }
@@ -215,7 +254,10 @@ const ChatInterface: React.FC = () => {
         conversation_history: conversationHistory
       };
 
-      const response = await fetch('http://localhost:8000/api/chat', {
+      // Use environment variable for backend URL, fallback to localhost for development
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+      
+      const response = await fetch(`${backendUrl}/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -235,8 +277,64 @@ const ChatInterface: React.FC = () => {
     }
   };
 
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    } else if (e.code === 'Space' && !e.shiftKey && !inputValue.trim()) {
+      // Only intercept Spacebar for voice input when text input is empty
+      e.preventDefault();
+      toggleVoiceRecording();
+    }
+    // Allow Spacebar to work normally when typing
+  };
+
+  // Voice input functions
+  const toggleVoiceRecording = () => {
+    if (!isSpeechRecognitionSupported) {
+      alert('Speech recognition is not supported in your browser.');
+      return;
+    }
+
+    if (voiceState.microphonePermission === 'denied') {
+      alert('Microphone permission is required for voice input. Please enable it in your browser settings.');
+      return;
+    }
+
+    if (recognitionRef.current) {
+      if (voiceState.isRecording) {
+        // Stop recording if already recording
+        recognitionRef.current.stop();
+        setVoiceState(prev => ({ ...prev, isRecording: false, manualActivation: false }));
+      } else {
+        // Start recording
+        setVoiceState(prev => ({ ...prev, manualActivation: true, isRecording: true }));
+        try {
+          recognitionRef.current.start();
+        } catch (error) {
+          console.error('Error starting speech recognition:', error);
+          setVoiceState(prev => ({ ...prev, isRecording: false, manualActivation: false }));
+        }
+      }
+    }
+  };
+
+  // Function to stop voice recording (can be called externally)
+  const stopVoiceRecording = () => {
+    if (recognitionRef.current && voiceState.isRecording) {
+      recognitionRef.current.stop();
+      setVoiceState(prev => ({ ...prev, isRecording: false, manualActivation: false }));
+    }
+  };
+
+  // Modified send message to stop recording if active
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
+
+    // Stop voice recording if it's active
+    if (voiceState.isRecording) {
+      stopVoiceRecording();
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -273,56 +371,6 @@ const ChatInterface: React.FC = () => {
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    } else if (e.code === 'Space' && !e.shiftKey && !inputValue.trim()) {
-      // Only intercept Spacebar for voice input when text input is empty
-      e.preventDefault();
-      toggleVoiceRecording();
-    }
-    // Allow Spacebar to work normally when typing
-  };
-
-  // Voice input functions
-  const toggleVoiceRecording = () => {
-    if (!isSpeechRecognitionSupported) {
-      alert('Speech recognition is not supported in your browser.');
-      return;
-    }
-
-    if (voiceState.microphonePermission === 'denied') {
-      alert('Microphone permission is required for voice input. Please enable it in your browser settings.');
-      return;
-    }
-
-    if (recognitionRef.current) {
-      if (voiceState.isRecording) {
-        // Stop recording if already recording
-        recognitionRef.current.stop();
-        setVoiceState(prev => ({ ...prev, isRecording: false, manualActivation: false }));
-      } else {
-        // Start recording
-        setVoiceState(prev => ({ ...prev, manualActivation: true }));
-        try {
-          recognitionRef.current.start();
-        } catch (error) {
-          console.error('Error starting speech recognition:', error);
-          setVoiceState(prev => ({ ...prev, isRecording: false, manualActivation: false }));
-        }
-      }
-    }
-  };
-
-  // Function to stop voice recording (can be called externally)
-  const stopVoiceRecording = () => {
-    if (recognitionRef.current && voiceState.isRecording) {
-      recognitionRef.current.stop();
-      setVoiceState(prev => ({ ...prev, isRecording: false, manualActivation: false }));
     }
   };
 
@@ -412,7 +460,7 @@ const ChatInterface: React.FC = () => {
               setInputValue(e.target.value);
             }}
             onKeyPress={handleKeyPress}
-            placeholder="Type your message here... (or press Space when empty to start voice input)"
+            placeholder="Type your message here... (or click mic to start voice input)"
             disabled={isLoading}
             rows={1}
             className="message-input"
@@ -424,7 +472,7 @@ const ChatInterface: React.FC = () => {
               onClick={voiceState.isRecording ? stopVoiceRecording : toggleVoiceRecording}
               disabled={isLoading || voiceState.microphonePermission === 'denied'}
               className={`voice-input-button ${voiceState.isRecording ? 'recording' : ''}`}
-              title={voiceState.isRecording ? 'Stop recording (Space)' : 'Start voice input (Space)'}
+              title={voiceState.isRecording ? 'Stop recording (click again)' : 'Start voice input'}
             >
               {voiceState.isRecording ? (
                 // Recording state - pulsing microphone
@@ -462,7 +510,7 @@ const ChatInterface: React.FC = () => {
         {voiceState.isRecording && (
           <div className="voice-status">
             <span className="recording-indicator">🎤 Listening...</span>
-            <span className="recording-hint">Speak now, or click mic button to stop</span>
+            <span className="recording-hint">Speak now, click mic again to stop, or press Send</span>
           </div>
         )}
         
