@@ -25,9 +25,11 @@ app.add_middleware(
 )
 
 # Initialize Anthropic client
-client = anthropic.Anthropic(
-    api_key=os.getenv("ANTHROPIC_API_KEY", "your-api-key-here")
-)
+api_key = os.getenv("ANTHROPIC_API_KEY")
+if not api_key or api_key == "your-api-key-here":
+    raise ValueError("ANTHROPIC_API_KEY environment variable is not set or is invalid")
+
+client = anthropic.Anthropic(api_key=api_key)
 
 class ChatMessage(BaseModel):
     content: str
@@ -120,8 +122,10 @@ Remove shame and judgment from learning. Create a safe space for curiosity. Focu
         )
         
     except anthropic.APIError as e:
+        print(f"Anthropic API error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Anthropic API error: {str(e)}")
     except Exception as e:
+        print(f"Internal server error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 if __name__ == "__main__":
