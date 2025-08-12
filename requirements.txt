@@ -1,0 +1,9 @@
+# Root requirements.txt for Railway deployment
+# This file tells Railway this is a Python project
+# The actual dependencies are in backend/requirements.txt
+
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+anthropic==0.62.0
+python-dotenv==1.1.1
+pydantic==2.11.7 
