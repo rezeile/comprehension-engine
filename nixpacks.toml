@@ -1,11 +1,10 @@
 [phases.setup]
-nixPkgs = [
-  "python311", 
-  "python311Packages.fastapi", 
-  "python311Packages.uvicorn", 
-  "python311Packages.anthropic", 
-  "python311Packages.python-dotenv", 
-  "python311Packages.pydantic"
+nixPkgs = ["python311"]
+
+[phases.install]
+cmds = [
+  "cd backend",
+  "pip install --user fastapi uvicorn anthropic python-dotenv pydantic"
 ]
 
 [start]
