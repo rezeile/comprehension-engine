@@ -98,6 +98,38 @@
 .setting-checkbox {
   margin-right: 12px;
   width: 18px;
+}
+
+.debug-btn {
+  background: #475569;
+  border: 1px solid #64748b;
+  color: #e2e8f0;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.debug-btn:hover {
+  background: #64748b;
+  border-color: #94a3b8;
+  color: #ffffff;
+}
+
+.debug-btn.danger {
+  background: #dc2626;
+  border-color: #ef4444;
+  color: #ffffff;
+}
+
+.debug-btn.danger:hover {
+  background: #b91c1c;
+  border-color: #dc2626;
+}
+
+.setting-checkbox {
   height: 18px;
   accent-color: #4f46e5;
 }

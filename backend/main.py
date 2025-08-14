@@ -8,6 +8,10 @@ import os
 from dotenv import load_dotenv
 import io
 
+# Import our new prompt management system
+from prompts import prompt_manager
+from config import prompt_settings
+
 # ElevenLabs imports
 try:
     from elevenlabs import generate, set_api_key
@@ -165,42 +169,8 @@ async def chat(request: ChatRequest):
         # Add current user message
         messages.append({"role": "user", "content": request.message})
         
-        # Socratic teaching system prompt
-        system_prompt = """You are a conversational tutor focused on helping students truly understand concepts through Socratic dialogue. You teach like a brilliant storyteller and science communicator, making abstract concepts personally compelling and relevant.
-
-**Response Style:**
-- Maximum 3 sentences per response, no exceptions
-- If you find yourself writing more, stop and ask a question instead
-- Listen deeply to what the student actually says
-- Respond thoughtfully based on their specific words, confusion, and curiosity
-- Be conversational and enthusiastic, but let excitement come from genuine responsiveness
-
-**Teaching Approach:**
-- ALWAYS start with a question to assess what they know before explaining anything
-- Lead with curiosity about their thinking, not with information delivery
-- When you do explain, hook attention with compelling relevance first ("Your body is performing trillions of chemical reactions right now...")
-- Use vivid analogies and real-world connections only after understanding their baseline
-- Connect new concepts to what students already care about
-- Follow the student's natural curiosity and confusion as your guide
-- Build understanding from foundational concepts (atoms → molecules → reactions)
-- One concept at a time - let them fully grasp each piece before moving on
-
-**Handling Confusion:**
-- Acknowledge anything they got partially right first
-- Use gentle, encouraging language: "Not quite, but I love that you're thinking about..." "I can see why you'd think that..."
-- Create maximum comfort with expressing confusion
-- Make "I don't get it" feel like the smartest response possible
-- Never make students feel judged for not understanding
-
-**Comprehension Detection:**
-- Pay close attention to their questions, examples, and connections
-- Detect true understanding through conversation patterns, not self-reporting
-- Notice when they ask clarifying questions vs when they make connections
-- Let their specific confusion guide where to go next in the conversation
-- Wait for their response before building on concepts
-
-**Core Philosophy:**
-Remove shame and judgment from learning. Create a safe space for curiosity. Focus on true comprehension, not memorization. Every question is a good question. Even for complex topics, resist the urge to give comprehensive explanations - your job is to guide discovery, not deliver information."""
+        # Get system prompt from our prompt management system
+        system_prompt = prompt_manager.get_active_prompt()
         
         # Call Claude Sonnet 4
         response = client.messages.create(
@@ -229,6 +199,70 @@ Remove shame and judgment from learning. Create a safe space for curiosity. Focu
 async def cors_test():
     """Test endpoint to verify CORS is working"""
     return {"message": "CORS is working!", "timestamp": "2024-01-01T00:00:00Z"}
+
+# Admin endpoints for prompt management
+@app.get("/api/admin/prompts")
+async def list_prompts():
+    """List all available prompt variants"""
+    try:
+        variants_info = prompt_manager.get_all_variants_info()
+        active_variant = prompt_manager.get_active_variant_name()
+        config_summary = prompt_settings.get_config_summary()
+        
+        return {
+            "variants": variants_info,
+            "active_variant": active_variant,
+            "config": config_summary,
+            "status": "success"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list prompts: {str(e)}")
+
+@app.get("/api/admin/prompts/{variant_name}")
+async def get_prompt(variant_name: str):
+    """Get specific prompt variant"""
+    try:
+        variant_info = prompt_manager.get_variant_info(variant_name)
+        if variant_info:
+            return {"variant": variant_info, "status": "success"}
+        else:
+            raise HTTPException(status_code=404, detail=f"Prompt variant '{variant_name}' not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get prompt: {str(e)}")
+
+@app.post("/api/admin/prompts/{variant_name}/activate")
+async def activate_prompt(variant_name: str):
+    """Set prompt variant as active"""
+    try:
+        success = prompt_manager.set_active_variant(variant_name)
+        if success:
+            return {
+                "message": f"Prompt variant '{variant_name}' activated successfully",
+                "active_variant": variant_name,
+                "status": "success"
+            }
+        else:
+            raise HTTPException(status_code=400, detail=f"Failed to activate prompt variant '{variant_name}'")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to activate prompt: {str(e)}")
+
+@app.get("/api/admin/prompts/status")
+async def get_prompt_status():
+    """Get current prompt system status"""
+    try:
+        return {
+            "active_variant": prompt_manager.get_active_variant_name(),
+            "total_variants": len(prompt_manager.list_variants()),
+            "available_variants": prompt_manager.list_variants(),
+            "config": prompt_settings.get_config_summary(),
+            "status": "success"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get prompt status: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

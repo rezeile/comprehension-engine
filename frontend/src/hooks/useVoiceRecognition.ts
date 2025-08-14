@@ -148,7 +148,11 @@ export const useVoiceRecognition = (options: VoiceRecognitionOptions = {}) => {
       return false;
     }
 
-    if (state.recognitionState === 'running') {
+    // Check multiple state indicators to prevent double-start
+    if (state.recognitionState === 'running' || 
+        state.recognitionState === 'starting' ||
+        isRecognitionRunningRef.current) {
+      // Recognition already running, skip duplicate start
       return false;
     }
     
@@ -161,6 +165,7 @@ export const useVoiceRecognition = (options: VoiceRecognitionOptions = {}) => {
     try {
       recognitionRef.current?.start();
       recognitionStateRef.current = 'starting';
+      setState(prev => ({ ...prev, recognitionState: 'starting' }));
       return true;
     } catch (error) {
       console.error('Error starting speech recognition:', error);
@@ -197,6 +202,17 @@ export const useVoiceRecognition = (options: VoiceRecognitionOptions = {}) => {
   // Reset recognition state
   const reset = useCallback(() => {
     stopRecording();
+    
+    // Force cleanup of any lingering recognition instances
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (error) {
+        // Silent cleanup - recognition might already be stopped
+      }
+      recognitionRef.current = null;
+    }
+    
     setState({
       isRecording: false,
       isRecognitionRunning: false,

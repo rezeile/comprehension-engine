@@ -11,6 +11,8 @@ interface SettingsPanelProps {
   voices: Voice[];
   voiceEnabled: boolean;
   onVoiceToggle: () => void;
+  onClearSpokenMessages?: () => void;
+  onGetSpokenMessageStatus?: () => any;
 }
 
 const SettingsPanel: React.FC<SettingsPanelProps> = ({
@@ -20,7 +22,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onVoiceChange,
   voices,
   voiceEnabled,
-  onVoiceToggle
+  onVoiceToggle,
+  onClearSpokenMessages = () => {},
+  onGetSpokenMessageStatus = () => {}
 }) => {
   return (
     <>
@@ -79,6 +83,31 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
               This app uses ElevenLabs AI voices for natural, human-like speech synthesis.
             </p>
           </div>
+          
+          {/* Debug Section */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="settings-section">
+              <h4>Debug</h4>
+              <div className="setting-item">
+                <button
+                  className="debug-btn"
+                  onClick={onGetSpokenMessageStatus}
+                  type="button"
+                >
+                  Show Spoken Message Status
+                </button>
+              </div>
+              <div className="setting-item">
+                <button
+                  className="debug-btn danger"
+                  onClick={onClearSpokenMessages}
+                  type="button"
+                >
+                  Clear Spoken Message History
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>

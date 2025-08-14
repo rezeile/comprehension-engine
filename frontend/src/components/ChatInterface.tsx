@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import './ChatInterface.css';
 import SettingsPanel from './SettingsPanel';
 import { VoiceService, Voice } from '../services/VoiceService';
@@ -34,8 +34,91 @@ const ChatInterface: React.FC = () => {
   const failedSpeechAttempts = useRef<Map<string, number>>(new Map());
   const MAX_SPEECH_RETRIES = 2;
   
+  // Track when voice mode was last entered to determine message freshness
+  const voiceModeEnterTime = useRef<number>(0);
+  
+  // Load previously spoken messages from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('comprehension-engine-spoken-messages');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Only restore messages from the last 24 hours to prevent accumulation
+        const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+        const recentMessages = parsed.filter((msg: any) => msg.timestamp > oneDayAgo);
+        spokenMessageIds.current = new Set(recentMessages.map((msg: any) => msg.id));
+      }
+    } catch (error) {
+      console.warn('Failed to load spoken messages from localStorage:', error);
+    }
+    
+    // Cleanup function to clear old spoken messages periodically
+    const cleanupInterval = setInterval(() => {
+      try {
+        const stored = localStorage.getItem('comprehension-engine-spoken-messages');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+          const recentMessages = parsed.filter((msg: any) => msg.timestamp > oneDayAgo);
+          localStorage.setItem('comprehension-engine-spoken-messages', JSON.stringify(recentMessages));
+        }
+      } catch (error) {
+        console.warn('Failed to cleanup old spoken messages:', error);
+      }
+    }, 60 * 60 * 1000); // Clean up every hour
+    
+    return () => clearInterval(cleanupInterval);
+  }, []);
+  
+  // Save spoken messages to localStorage
+  const saveSpokenMessage = useCallback((messageId: string) => {
+    try {
+      const stored = localStorage.getItem('comprehension-engine-spoken-messages') || '[]';
+      const parsed = JSON.parse(stored);
+      const newEntry = { id: messageId, timestamp: Date.now() };
+      
+      // Remove duplicates and old entries (older than 24 hours)
+      const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+      const filtered = parsed.filter((msg: any) => msg.id !== messageId && msg.timestamp > oneDayAgo);
+      filtered.push(newEntry);
+      
+      localStorage.setItem('comprehension-engine-spoken-messages', JSON.stringify(filtered));
+    } catch (error) {
+      console.warn('Failed to save spoken message to localStorage:', error);
+    }
+  }, []);
+  
+  // Clear spoken messages (useful for debugging or user control)
+  const clearSpokenMessages = useCallback(() => {
+    try {
+      localStorage.removeItem('comprehension-engine-spoken-messages');
+      spokenMessageIds.current.clear();
+    } catch (error) {
+      console.warn('Failed to clear spoken messages:', error);
+    }
+  }, []);
+  
+  // Get spoken message status for debugging
+  const getSpokenMessageStatus = useCallback(() => {
+    try {
+      const stored = localStorage.getItem('comprehension-engine-spoken-messages');
+      const parsed = stored ? JSON.parse(stored) : [];
+      return {
+        currentSpokenCount: spokenMessageIds.current.size,
+        persistentSpokenCount: parsed.length,
+        voiceModeEnterTime: new Date(voiceModeEnterTime.current).toISOString(),
+        lastMessageId: messages[messages.length - 1]?.id,
+        lastMessageTimestamp: messages[messages.length - 1]?.timestamp?.toISOString()
+      };
+    } catch (error) {
+      console.warn('Failed to get spoken message status:', error);
+      return null;
+    }
+  }, [messages]);
+  
   const {
     isRecording: isRecognitionRecording,
+    isRecognitionRunning,
     startRecording,
     stopRecording,
     isSupported: isSpeechRecognitionSupported
@@ -150,8 +233,21 @@ const ChatInterface: React.FC = () => {
         return;
       }
       
-      // Only speak if this is an assistant message, not loading, hasn't been spoken before, and not currently speaking
-      if (lastMessage.sender === 'assistant' && !isLoading && !spokenMessageIds.current.has(lastMessage.id) && !isSpeaking) {
+      // Check if this message is fresh enough to speak (within last 5 minutes of entering voice mode)
+      const messageAge = Date.now() - lastMessage.timestamp.getTime();
+      const voiceModeAge = Date.now() - voiceModeEnterTime.current;
+      const isMessageFresh = messageAge < 5 * 60 * 1000; // 5 minutes
+      const isVoiceModeFresh = voiceModeAge < 5 * 60 * 1000; // 5 minutes
+      
+      // Only speak if this is an assistant message, not loading, hasn't been spoken before, 
+      // not currently speaking, and the message is fresh relative to voice mode entry
+      if (lastMessage.sender === 'assistant' && 
+          !isLoading && 
+          !spokenMessageIds.current.has(lastMessage.id) && 
+          !isSpeaking &&
+          isMessageFresh &&
+          isVoiceModeFresh) {
+        
         // Add additional safeguard: check if we're already processing this message
         if (spokenMessageIds.current.has(lastMessage.id)) {
           return;
@@ -159,6 +255,11 @@ const ChatInterface: React.FC = () => {
         
         // Mark this message as spoken to prevent infinite loops
         spokenMessageIds.current.add(lastMessage.id);
+        
+        // Save to persistent storage
+        saveSpokenMessage(lastMessage.id);
+        
+        // Message is fresh and ready to speak
         
         // Use ElevenLabs if available, otherwise fallback to Web Speech API
         if (isElevenLabsSupported) {
@@ -168,7 +269,16 @@ const ChatInterface: React.FC = () => {
         }
       }
     }
-  }, [messages, isVoiceMode, voiceState.voiceEnabled, isLoading, speak, isElevenLabsSupported, selectedVoice, isSpeaking]);
+  }, [messages, isVoiceMode, voiceState.voiceEnabled, isLoading, speak, isElevenLabsSupported, selectedVoice, isSpeaking, saveSpokenMessage]);
+
+  // Create stable references for the recording functions
+  const stableStopRecording = useCallback(() => {
+    stopRecording();
+  }, [stopRecording]);
+
+  const stableStartRecording = useCallback(() => {
+    startRecording();
+  }, [startRecording]);
 
   // Handle TTS state changes to manage speech recognition properly
   useEffect(() => {
@@ -176,30 +286,40 @@ const ChatInterface: React.FC = () => {
     if (isVoiceMode && isSpeaking) {
       // When AI starts speaking, pause speech recognition temporarily
       if (isRecognitionRecording) {
-        stopRecording();
+        stableStopRecording();
       }
     } else if (isVoiceMode && !isSpeaking && !isRecognitionRecording) {
       // When AI stops speaking, resume speech recognition if we're still in voice mode
       // Add a small delay to avoid audio feedback issues
       setTimeout(() => {
-        if (isVoiceMode && !isRecognitionRecording) {
-          startRecording();
+        if (isVoiceMode && !isRecognitionRecording && !isRecognitionRunning) {
+          stableStartRecording();
         }
       }, 500);
     }
-  }, [isSpeaking, isVoiceMode, isRecognitionRecording, stopRecording, startRecording]);
+  }, [isSpeaking, isVoiceMode, isRecognitionRecording, isRecognitionRunning, stableStopRecording, stableStartRecording]);
 
   // Voice input functions - now handled by custom hooks
   const toggleVoiceRecording = () => {
     if (isVoiceMode) {
       exitVoiceMode();
     } else {
+      // Track when voice mode is entered to determine message freshness
+      voiceModeEnterTime.current = Date.now();
+      
+      // Track when voice mode is entered
+      
       enterVoiceMode();
-      // Start recording after entering voice mode
+      
+      // Start recording after entering voice mode, but only if not already recording
       setTimeout(() => {
         // Clear transcription when starting new recording session
         updateTranscription('', false);
-        startRecording();
+        
+        // Only start recording if not already recording
+        if (!isRecognitionRecording && !isRecognitionRunning) {
+          startRecording();
+        }
       }, 100);
     }
   };
@@ -304,6 +424,8 @@ const ChatInterface: React.FC = () => {
         voices={availableVoices}
         voiceEnabled={voiceState.voiceEnabled}
         onVoiceToggle={toggleVoiceOutput}
+        onClearSpokenMessages={clearSpokenMessages}
+        onGetSpokenMessageStatus={getSpokenMessageStatus}
       />
     </div>
   );
