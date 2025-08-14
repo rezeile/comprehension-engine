@@ -1,10 +1,21 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 import anthropic
 import os
 from dotenv import load_dotenv
+import io
+
+# ElevenLabs imports
+try:
+    from elevenlabs import generate, set_api_key
+    from elevenlabs import Voice
+    ELEVENLABS_AVAILABLE = True
+except ImportError:
+    ELEVENLABS_AVAILABLE = False
+    print("Warning: ElevenLabs not available. Install with: pip install elevenlabs")
 
 # Load environment variables
 load_dotenv()
@@ -31,6 +42,15 @@ if not api_key or api_key == "your-api-key-here":
 
 client = anthropic.Anthropic(api_key=api_key)
 
+# Initialize ElevenLabs if available
+if ELEVENLABS_AVAILABLE:
+    elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+    if elevenlabs_api_key and elevenlabs_api_key != "your-elevenlabs-api-key-here":
+        set_api_key(elevenlabs_api_key)
+        print("ElevenLabs API configured successfully")
+    else:
+        print("Warning: ELEVENLABS_API_KEY not set. TTS will use fallback.")
+
 class ChatMessage(BaseModel):
     content: str
     role: str = "user"
@@ -43,6 +63,45 @@ class ChatResponse(BaseModel):
     response: str
     conversation_id: Optional[str] = None
 
+# New TTS models
+class TTSRequest(BaseModel):
+    text: str
+    voice_id: str = "21m00Tcm4TlvDq8ikWAM"  # Default to Rachel voice
+
+class VoiceInfo(BaseModel):
+    id: str
+    name: str
+    description: str
+    category: str
+
+# Pre-defined voices for the app
+AVAILABLE_VOICES = [
+    VoiceInfo(
+        id="21m00Tcm4TlvDq8ikWAM",
+        name="Rachel",
+        description="Clear, friendly, educational voice",
+        category="Educational"
+    ),
+    VoiceInfo(
+        id="AZnzlk1XvdvUeBnXmlld",
+        name="Domi",
+        description="Warm, encouraging, patient voice",
+        category="Friendly"
+    ),
+    VoiceInfo(
+        id="EXAVITQu4vr4xnSDxMaL",
+        name="Bella",
+        description="Energetic, engaging, youthful voice",
+        category="Enthusiastic"
+    ),
+    VoiceInfo(
+        id="ErXwobaYiN019PkySvjV",
+        name="Antoni",
+        description="Professional, authoritative, trustworthy voice",
+        category="Professional"
+    )
+]
+
 @app.get("/")
 async def root():
     return {"message": "Comprehension Engine API is running!"}
@@ -50,6 +109,41 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "comprehension-engine"}
+
+@app.get("/api/voices")
+async def get_available_voices():
+    """Get list of available ElevenLabs voices"""
+    return {"voices": AVAILABLE_VOICES}
+
+@app.post("/api/tts")
+async def text_to_speech(request: TTSRequest):
+    """Convert text to speech using ElevenLabs"""
+    if not ELEVENLABS_AVAILABLE:
+        raise HTTPException(status_code=503, detail="ElevenLabs TTS not available")
+    
+    try:
+        # Validate voice ID
+        valid_voice_ids = [voice.id for voice in AVAILABLE_VOICES]
+        if request.voice_id not in valid_voice_ids:
+            raise HTTPException(status_code=400, detail="Invalid voice ID")
+        
+        # Generate speech with ElevenLabs
+        audio = generate(
+            text=request.text,
+            voice=request.voice_id,
+            model="eleven_multilingual_v2"
+        )
+        
+        # Return audio as streaming response
+        return StreamingResponse(
+            io.BytesIO(audio),
+            media_type="audio/mpeg",
+            headers={"Content-Disposition": "attachment; filename=speech.mp3"}
+        )
+        
+    except Exception as e:
+        print(f"ElevenLabs TTS error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"TTS generation failed: {str(e)}")
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):

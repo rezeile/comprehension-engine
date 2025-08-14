@@ -3,4 +3,8 @@ fastapi==0.116.1
 uvicorn[standard]==0.35.0
 anthropic==0.62.0
 python-dotenv==1.1.1
-pydantic==2.11.7 
+pydantic==2.11.7
+
+# ElevenLabs integration
+elevenlabs==0.2.26
+python-multipart==0.0.6 

@@ -1,0 +1,195 @@
+/* ChatInput Styles - Using Shared Utilities */
+@import '../../styles/shared.css';
+
+/* Input Container */
+.input-container {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  padding: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+}
+
+.input-wrapper {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-end;
+  background: white;
+  border-radius: 24px;
+  padding: 0.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.message-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 0.75rem;
+  font-size: 1rem;
+  font-family: inherit;
+  line-height: 1.4;
+  max-height: 120px;
+  min-height: 20px;
+  background: transparent;
+}
+
+.message-input::placeholder {
+  color: #999;
+}
+
+/* Voice Input Button */
+.voice-input-button {
+  background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: white;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.voice-input-button:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+}
+
+.voice-input-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #ccc;
+}
+
+.voice-input-button.recording {
+  background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+  animation: recording-pulse 1.5s infinite;
+}
+
+.voice-input-button.recording:hover {
+  box-shadow: 0 4px 12px rgba(244, 67, 54, 0.4);
+}
+
+.voice-input-button.cooldown {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+/* Send Button */
+.send-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: white;
+  flex-shrink: 0;
+}
+
+.send-button:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.send-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Permission Warning */
+.permission-warning {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(244, 67, 54, 0.1);
+  border-radius: 12px;
+  border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+.permission-warning span {
+  color: #f44336;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* Recording Animation */
+@keyframes recording-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.7);
+  }
+  50% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 10px rgba(244, 67, 54, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(244, 67, 54, 0);
+  }
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .input-container {
+    padding: 0.75rem;
+  }
+  
+  .input-wrapper {
+    padding: 0.4rem;
+    gap: 0.5rem;
+  }
+  
+  .message-input {
+    padding: 0.6rem;
+    font-size: 0.95rem;
+  }
+  
+  .voice-input-button,
+  .send-button {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+@media (max-width: 480px) {
+  .input-container {
+    padding: 0.5rem;
+  }
+  
+  .input-wrapper {
+    padding: 0.3rem;
+    gap: 0.4rem;
+  }
+  
+  .message-input {
+    padding: 0.5rem;
+    font-size: 0.9rem;
+  }
+  
+  .voice-input-button,
+  .send-button {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .permission-warning {
+    margin-top: 0.4rem;
+    padding: 0.5rem;
+  }
+  
+  .permission-warning span {
+    font-size: 0.8rem;
+  }
+}

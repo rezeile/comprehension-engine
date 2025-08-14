@@ -1,0 +1,149 @@
+/* ChatHeader Styles - Using Shared Utilities */
+@import '../../styles/shared.css';
+
+/* Header Container */
+.chat-header {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  padding: 1rem;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.chat-header h1 {
+  margin: 0;
+  color: white;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+
+.chat-header p {
+  margin: 0.25rem 0 0 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+}
+
+/* Voice Controls Header */
+.voice-controls-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+}
+
+/* Voice Toggle Button */
+.voice-toggle {
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: white;
+  backdrop-filter: blur(10px);
+}
+
+.voice-toggle:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: scale(1.05);
+}
+
+.voice-toggle.enabled {
+  background: rgba(76, 175, 80, 0.3);
+  border-color: rgba(76, 175, 80, 0.6);
+}
+
+.voice-toggle.enabled.speaking {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.voice-toggle.disabled {
+  background: rgba(244, 67, 54, 0.3);
+  border-color: rgba(244, 67, 54, 0.6);
+}
+
+/* Settings Gear Button */
+.settings-gear {
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: white;
+  backdrop-filter: blur(10px);
+}
+
+.settings-gear:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: scale(1.05);
+}
+
+/* Compatibility Warning */
+.compatibility-warning {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .chat-header h1 {
+    font-size: 1.25rem;
+  }
+  
+  .chat-header p {
+    font-size: 0.8rem;
+  }
+  
+  .voice-controls-header {
+    top: 0.75rem;
+    right: 0.75rem;
+    gap: 0.75rem;
+  }
+  
+  .voice-toggle,
+  .settings-gear {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-header {
+    padding: 0.75rem;
+  }
+  
+  .chat-header h1 {
+    font-size: 1.1rem;
+  }
+  
+  .voice-controls-header {
+    top: 0.5rem;
+    right: 0.5rem;
+    gap: 0.5rem;
+  }
+  
+  .voice-toggle,
+  .settings-gear {
+    width: 32px;
+    height: 32px;
+  }
+}
