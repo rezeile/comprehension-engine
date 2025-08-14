@@ -27,12 +27,15 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",  # React dev server
+        "https://ai-tutor-frontend-gold.vercel.app",  # Production Vercel frontend
         "https://ai-tutor-frontend-ofkj3zd0b-rezeiles-projects.vercel.app",  # Vercel frontend
         "https://*.vercel.app",  # All Vercel subdomains
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Explicitly specify methods
+    allow_headers=["*"],  # Allow all headers
+    expose_headers=["*"],  # Expose all headers
+    max_age=86400,  # Cache preflight requests for 24 hours
 )
 
 # Initialize Anthropic client
@@ -221,6 +224,11 @@ Remove shame and judgment from learning. Create a safe space for curiosity. Focu
     except Exception as e:
         print(f"Internal server error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.get("/api/cors-test")
+async def cors_test():
+    """Test endpoint to verify CORS is working"""
+    return {"message": "CORS is working!", "timestamp": "2024-01-01T00:00:00Z"}
 
 if __name__ == "__main__":
     import uvicorn
