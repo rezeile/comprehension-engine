@@ -69,11 +69,32 @@ class PromptVariantManager:
     
     def get_active_prompt(self) -> str:
         """Get the content of the currently active prompt."""
+        # Check if environment variable has changed and reload if needed
+        self._check_and_reload_env_config()
+        
         if self.active_variant and self.active_variant in self.variants:
             return self.variants[self.active_variant].get_content()
         
         # Fallback to default prompt
         return DEFAULT_PROMPT.get_content()
+    
+    def _check_and_reload_env_config(self) -> None:
+        """Check if environment configuration has changed and reload if necessary."""
+        try:
+            from config.settings import PromptSettings
+            config = PromptSettings.from_env()
+            
+            # Only update if the environment variable specifies a different variant
+            # and that variant exists
+            if (config.default_variant != self.active_variant and 
+                config.default_variant in self.variants):
+                print(f"Environment variable changed: switching from '{self.active_variant}' to '{config.default_variant}'")
+                self.set_active_variant(config.default_variant)
+        except Exception as e:
+            # Silently continue if there's an issue reading environment
+            # to avoid breaking the prompt system
+            print(f"Warning: Could not reload environment config: {e}")
+            pass
     
     def get_active_variant_name(self) -> str:
         """Get the name of the currently active variant."""
