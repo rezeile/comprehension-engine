@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import FormattedMessage from '../FormattedMessage';
 import './ChatMessages.css';
 
 interface Message {
@@ -29,7 +30,7 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({ messages, isLoading }) => {
           className={`message ${message.sender === 'user' ? 'user-message' : 'assistant-message'}`}
         >
           <div className="message-content">
-            {message.content}
+            <FormattedMessage content={message.content} />
           </div>
           <div className="message-timestamp">
             {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

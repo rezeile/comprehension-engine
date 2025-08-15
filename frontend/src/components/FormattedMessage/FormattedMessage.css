@@ -1,0 +1,380 @@
+.formatted-message {
+  line-height: 1.6;
+  color: inherit;
+  font-family: inherit;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Headers */
+.formatted-message h1,
+.formatted-message h2,
+.formatted-message h3,
+.formatted-message h4,
+.formatted-message h5,
+.formatted-message h6 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.formatted-message h1 {
+  font-size: 1.5rem;
+}
+
+.formatted-message h2 {
+  font-size: 1.3rem;
+}
+
+.formatted-message h3 {
+  font-size: 1.1rem;
+}
+
+/* Paragraphs */
+.formatted-message p {
+  margin-bottom: 1rem;
+  margin-top: 0;
+}
+
+.formatted-message p:last-child {
+  margin-bottom: 0;
+}
+
+/* Lists */
+.formatted-message ul,
+.formatted-message ol {
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+}
+
+.formatted-message li {
+  margin-bottom: 0.25rem;
+}
+
+.formatted-message li > p {
+  margin-bottom: 0.5rem;
+}
+
+/* Nested lists */
+.formatted-message ul ul,
+.formatted-message ol ol,
+.formatted-message ul ol,
+.formatted-message ol ul {
+  margin: 0.5rem 0;
+}
+
+/* Tables */
+.formatted-message .table-wrapper {
+  overflow-x: auto;
+  margin: 1rem 0;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.formatted-message table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 300px;
+}
+
+.formatted-message th {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 0.75rem;
+  font-weight: 600;
+  text-align: left;
+  border: none;
+}
+
+.formatted-message td {
+  padding: 0.75rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  border-left: none;
+  border-right: none;
+  border-top: none;
+}
+
+.formatted-message tr:nth-child(even) {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.formatted-message tr:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+/* Inline Code */
+.formatted-message code {
+  background: rgba(0, 0, 0, 0.05);
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+  font-size: 0.9em;
+  color: #d63384;
+  font-weight: 600;
+}
+
+/* Code Block Container */
+.formatted-message .code-block-container {
+  margin: 1rem 0;
+  border-radius: 8px;
+  background: #2d3748;
+  border: 1px solid #4a5568;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Code Block Header */
+.formatted-message .code-block-header {
+  background: #4a5568;
+  padding: 0.5rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #718096;
+}
+
+.formatted-message .code-block-language {
+  color: #e2e8f0;
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.formatted-message .code-block-copy {
+  background: #68d391;
+  color: #1a202c;
+  border: none;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.formatted-message .code-block-copy:hover {
+  background: #48bb78;
+}
+
+.formatted-message .code-block-copy:active {
+  background: #38a169;
+}
+
+.formatted-message .code-block-copy.copied {
+  background: #9f7aea;
+  color: white;
+}
+
+/* Code Block Content */
+.formatted-message pre {
+  margin: 0;
+  padding: 1rem;
+  background: #2d3748 !important;
+  overflow-x: auto;
+  border-radius: 0;
+}
+
+.formatted-message pre code {
+  background: none !important;
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #e2e8f0;
+  font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+}
+
+/* Override syntax highlighter styles for consistent dark theme */
+.formatted-message pre[class*="language-"] {
+  margin: 0 !important;
+  background: #2d3748 !important;
+  border-radius: 0 !important;
+}
+
+/* Syntax highlighting color overrides for dark theme */
+.formatted-message .token.comment,
+.formatted-message .token.prolog,
+.formatted-message .token.doctype,
+.formatted-message .token.cdata {
+  color: #a0aec0 !important;
+}
+
+.formatted-message .token.punctuation {
+  color: #e2e8f0 !important;
+}
+
+.formatted-message .token.property,
+.formatted-message .token.tag,
+.formatted-message .token.constant,
+.formatted-message .token.symbol,
+.formatted-message .token.deleted {
+  color: #f56565 !important;
+}
+
+.formatted-message .token.boolean,
+.formatted-message .token.number {
+  color: #ed8936 !important;
+}
+
+.formatted-message .token.selector,
+.formatted-message .token.attr-name,
+.formatted-message .token.string,
+.formatted-message .token.char,
+.formatted-message .token.builtin,
+.formatted-message .token.inserted {
+  color: #68d391 !important;
+}
+
+.formatted-message .token.operator,
+.formatted-message .token.entity,
+.formatted-message .token.url,
+.formatted-message .language-css .token.string,
+.formatted-message .style .token.string,
+.formatted-message .token.variable {
+  color: #4fd1c7 !important;
+}
+
+.formatted-message .token.atrule,
+.formatted-message .token.attr-value,
+.formatted-message .token.function,
+.formatted-message .token.class-name {
+  color: #fbb6ce !important;
+}
+
+.formatted-message .token.keyword {
+  color: #9f7aea !important;
+}
+
+.formatted-message .token.regex,
+.formatted-message .token.important {
+  color: #ed8936 !important;
+}
+
+/* Blockquotes */
+.formatted-message blockquote {
+  border-left: 4px solid #667eea;
+  margin: 1rem 0;
+  padding-left: 1rem;
+  color: rgba(0, 0, 0, 0.7);
+  font-style: italic;
+}
+
+.formatted-message blockquote p {
+  margin-bottom: 0.5rem;
+}
+
+/* Links */
+.formatted-message a {
+  color: #667eea;
+  text-decoration: none;
+}
+
+.formatted-message a:hover {
+  text-decoration: underline;
+}
+
+/* Horizontal rules */
+.formatted-message hr {
+  border: none;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  margin: 2rem 0;
+}
+
+/* Strong and emphasis */
+.formatted-message strong {
+  font-weight: 600;
+}
+
+.formatted-message em {
+  font-style: italic;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .formatted-message h1 {
+    font-size: 1.3rem;
+  }
+  
+  .formatted-message h2 {
+    font-size: 1.2rem;
+  }
+  
+  .formatted-message h3 {
+    font-size: 1.1rem;
+  }
+  
+  .formatted-message table {
+    font-size: 0.9rem;
+  }
+  
+  .formatted-message th,
+  .formatted-message td {
+    padding: 0.5rem;
+  }
+  
+  .formatted-message pre {
+    font-size: 0.8rem;
+  }
+  
+  .formatted-message pre code {
+    font-size: 0.8rem !important;
+  }
+  
+  .formatted-message ul,
+  .formatted-message ol {
+    padding-left: 1.2rem;
+  }
+  
+  .formatted-message .code-block-header {
+    padding: 0.4rem 0.8rem;
+  }
+  
+  .formatted-message .code-block-language {
+    font-size: 0.7rem;
+  }
+  
+  .formatted-message .code-block-copy {
+    font-size: 0.6rem;
+    padding: 0.2rem 0.4rem;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .formatted-message code {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fbb6ce;
+  }
+  
+  .formatted-message tr:nth-child(even) {
+    background-color: rgba(255, 255, 255, 0.03);
+  }
+  
+  .formatted-message tr:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+  }
+  
+  .formatted-message td {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  .formatted-message blockquote {
+    color: rgba(255, 255, 255, 0.7);
+  }
+  
+  .formatted-message hr {
+    border-top-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  /* Code blocks already have dark theme built-in */
+  .formatted-message .code-block-container {
+    border-color: #2d3748;
+  }
+  
+  .formatted-message .code-block-header {
+    background: #1a202c;
+    border-bottom-color: #2d3748;
+  }
+}
