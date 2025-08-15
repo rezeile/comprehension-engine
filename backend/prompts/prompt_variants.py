@@ -3,7 +3,7 @@ Prompt variant management and switching functionality.
 """
 
 from typing import Dict, Optional, List
-from .base_prompts import BasePrompt, DEFAULT_PROMPT
+from .base_prompts import BasePrompt, DEFAULT_PROMPT, EMPATHETIC_TUTOR_PROMPT_INSTANCE
 
 
 class PromptVariantManager:
@@ -13,9 +13,20 @@ class PromptVariantManager:
         self.variants: Dict[str, BasePrompt] = {}
         self.active_variant: Optional[str] = None
         
-        # Initialize with default prompt
+        # Initialize with default prompt and new empathetic tutor prompt
         self.add_variant(DEFAULT_PROMPT)
-        self.set_active_variant(DEFAULT_PROMPT.name)
+        self.add_variant(EMPATHETIC_TUTOR_PROMPT_INSTANCE)
+        
+        # Set active variant based on environment configuration
+        from config.settings import PromptSettings
+        config = PromptSettings.from_env()
+        
+        # Try to set the configured variant, fallback to default if it doesn't exist
+        if config.default_variant in [DEFAULT_PROMPT.name, EMPATHETIC_TUTOR_PROMPT_INSTANCE.name]:
+            self.set_active_variant(config.default_variant)
+        else:
+            print(f"Warning: Configured variant '{config.default_variant}' not found, using default")
+            self.set_active_variant(DEFAULT_PROMPT.name)
     
     def add_variant(self, variant: BasePrompt) -> None:
         """Add a new prompt variant."""

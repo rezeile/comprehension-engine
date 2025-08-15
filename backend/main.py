@@ -172,12 +172,12 @@ async def chat(request: ChatRequest):
         # Get system prompt from our prompt management system
         system_prompt = prompt_manager.get_active_prompt()
         
-        # Call Claude Sonnet 4
+        # Call Claude Sonnet 4 with dynamic system prompt
         response = client.messages.create(
             model="claude-3-5-sonnet-20241022",
             max_tokens=1000,
-            messages=messages,
-            system=system_prompt
+            system=system_prompt,
+            messages=messages
         )
         
         # Extract the response content
