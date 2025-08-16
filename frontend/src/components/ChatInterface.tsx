@@ -88,33 +88,9 @@ const ChatInterface: React.FC = () => {
     }
   }, []);
   
-  // Clear spoken messages (useful for debugging or user control)
-  const clearSpokenMessages = useCallback(() => {
-    try {
-      localStorage.removeItem('comprehension-engine-spoken-messages');
-      spokenMessageIds.current.clear();
-    } catch (error) {
-      console.warn('Failed to clear spoken messages:', error);
-    }
-  }, []);
+  // Removed clearSpokenMessages UI; keep for potential future use
   
-  // Get spoken message status for debugging
-  const getSpokenMessageStatus = useCallback(() => {
-    try {
-      const stored = localStorage.getItem('comprehension-engine-spoken-messages');
-      const parsed = stored ? JSON.parse(stored) : [];
-      return {
-        currentSpokenCount: spokenMessageIds.current.size,
-        persistentSpokenCount: parsed.length,
-        voiceModeEnterTime: new Date(voiceModeEnterTime.current).toISOString(),
-        lastMessageId: messages[messages.length - 1]?.id,
-        lastMessageTimestamp: messages[messages.length - 1]?.timestamp?.toISOString()
-      };
-    } catch (error) {
-      console.warn('Failed to get spoken message status:', error);
-      return null;
-    }
-  }, [messages]);
+  // Removed debug status UI
   
   const {
     isRecording: isRecognitionRecording,
@@ -370,9 +346,6 @@ const ChatInterface: React.FC = () => {
   return (
     <div className="chat-container">
       <ChatHeader
-        voiceEnabled={voiceState.voiceEnabled}
-        isSpeaking={isSpeaking}
-        onVoiceToggle={toggleVoiceOutput}
         onSettingsOpen={() => setIsSettingsOpen(true)}
         isSpeechRecognitionSupported={isSpeechRecognitionSupported}
       />
@@ -424,8 +397,6 @@ const ChatInterface: React.FC = () => {
         voices={availableVoices}
         voiceEnabled={voiceState.voiceEnabled}
         onVoiceToggle={toggleVoiceOutput}
-        onClearSpokenMessages={clearSpokenMessages}
-        onGetSpokenMessageStatus={getSpokenMessageStatus}
       />
     </div>
   );

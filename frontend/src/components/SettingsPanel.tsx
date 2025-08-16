@@ -1,4 +1,5 @@
 import React from 'react';
+import { useAuth } from '../context/AuthContext';
 import VoiceSelector from './VoiceSelector';
 import { Voice } from '../services/VoiceService';
 import './SettingsPanel.css';
@@ -11,8 +12,6 @@ interface SettingsPanelProps {
   voices: Voice[];
   voiceEnabled: boolean;
   onVoiceToggle: () => void;
-  onClearSpokenMessages?: () => void;
-  onGetSpokenMessageStatus?: () => any;
 }
 
 const SettingsPanel: React.FC<SettingsPanelProps> = ({
@@ -22,10 +21,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onVoiceChange,
   voices,
   voiceEnabled,
-  onVoiceToggle,
-  onClearSpokenMessages = () => {},
-  onGetSpokenMessageStatus = () => {}
+  onVoiceToggle
 }) => {
+  const { logout } = useAuth();
   return (
     <>
       {/* Backdrop */}
@@ -84,30 +82,18 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </p>
           </div>
           
-          {/* Debug Section */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="settings-section">
-              <h4>Debug</h4>
-              <div className="setting-item">
-                <button
-                  className="debug-btn"
-                  onClick={onGetSpokenMessageStatus}
-                  type="button"
-                >
-                  Show Spoken Message Status
-                </button>
-              </div>
-              <div className="setting-item">
-                <button
-                  className="debug-btn danger"
-                  onClick={onClearSpokenMessages}
-                  type="button"
-                >
-                  Clear Spoken Message History
-                </button>
-              </div>
+          {/* Account Actions */}
+          <div className="settings-section">
+            <div className="setting-item">
+              <button
+                className="debug-btn danger"
+                onClick={logout}
+                type="button"
+              >
+                Log out
+              </button>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </>

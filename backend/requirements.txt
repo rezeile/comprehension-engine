@@ -7,4 +7,17 @@ pydantic==2.11.7
 
 # ElevenLabs integration
 elevenlabs==0.2.26
-python-multipart==0.0.6 
+python-multipart==0.0.6
+
+# Database dependencies
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.7
+alembic==1.12.1
+
+# Authentication dependencies
+authlib==1.2.1
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+httpx==0.26.0
+email-validator==2.0.0
+itsdangerous==2.1.2 

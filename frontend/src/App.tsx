@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
 import ChatInterface from './components/ChatInterface';
 import { mixpanelService } from './services/MixpanelService';
+import { AuthProvider } from './context/AuthContext';
+import ProtectedRoute from './components/Auth/ProtectedRoute';
 import './App.css';
 
 function App() {
@@ -23,9 +25,13 @@ function App() {
   }, []);
 
   return (
-    <div className="App">
-      <ChatInterface />
-    </div>
+    <AuthProvider>
+      <div className="App">
+        <ProtectedRoute>
+          <ChatInterface />
+        </ProtectedRoute>
+      </div>
+    </AuthProvider>
   );
 }
 

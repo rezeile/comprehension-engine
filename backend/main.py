@@ -1,16 +1,26 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import anthropic
 import os
 from dotenv import load_dotenv
 import io
+from sqlalchemy.orm import Session
+from time import perf_counter
 
 # Import our new prompt management system
 from prompts import prompt_manager
 from config import prompt_settings
+
+# Import database components
+from database import get_db, User, Conversation, ConversationTurn
+from database.connection import init_db
+
+# Import API routes
+from api.auth_routes import router as auth_router
 
 # ElevenLabs imports
 try:
@@ -26,14 +36,29 @@ load_dotenv()
 
 app = FastAPI(title="Comprehension Engine API", version="1.0.0")
 
+# Initialize database on startup
+@app.on_event("startup")
+async def startup_event():
+    try:
+        init_db()
+        print("Database initialized successfully")
+    except Exception as e:
+        print(f"Database initialization failed: {e}")
+        # Don't fail startup, allow API to run even if DB is down
+
+# Session middleware for OAuth (must be added before other middleware)
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production")
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+
 # CORS middleware for frontend communication
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",  # React dev server
+        "http://127.0.0.1:3000",  # Alternative localhost
         "https://ai-tutor-frontend-gold.vercel.app",  # Production Vercel frontend
         "https://ai-tutor-frontend-ofkj3zd0b-rezeiles-projects.vercel.app",  # Vercel frontend
-        "https://*.vercel.app",  # All Vercel subdomains
+        "https://comprehension-engine-production.up.railway.app",  # Railway backend (for OAuth redirects)
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Explicitly specify methods
@@ -41,6 +66,9 @@ app.add_middleware(
     expose_headers=["*"],  # Expose all headers
     max_age=86400,  # Cache preflight requests for 24 hours
 )
+
+# Include authentication routes
+app.include_router(auth_router)
 
 # Initialize Anthropic client
 api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -117,6 +145,27 @@ async def root():
 async def health_check():
     return {"status": "healthy", "service": "comprehension-engine"}
 
+@app.get("/health/db")
+async def database_health_check(db: Session = Depends(get_db)):
+    """Check database connectivity and return basic stats"""
+    try:
+        # Simple query to test connection
+        user_count = db.query(User).count()
+        conversation_count = db.query(Conversation).count()
+        turn_count = db.query(ConversationTurn).count()
+        
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "stats": {
+                "users": user_count,
+                "conversations": conversation_count,
+                "conversation_turns": turn_count
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Database connection failed: {str(e)}")
+
 @app.get("/api/voices")
 async def get_available_voices():
     """Get list of available ElevenLabs voices"""
@@ -153,8 +202,9 @@ async def text_to_speech(request: TTSRequest):
         raise HTTPException(status_code=500, detail=f"TTS generation failed: {str(e)}")
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user: Optional[User] = Depends(lambda: None)):
     try:
+        start_time = perf_counter()
         # Prepare conversation history for Claude
         messages = []
         
@@ -182,10 +232,54 @@ async def chat(request: ChatRequest):
         
         # Extract the response content
         ai_response = response.content[0].text if response.content else "I apologize, but I couldn't generate a response at this time."
-        
+
+        # Persist conversation/turn if authenticated
+        conversation_id_str: Optional[str] = None
+        try:
+            if current_user:
+                from database.models import Conversation, ConversationTurn
+                # Find or create an active conversation for this user (simple strategy)
+                conversation = (
+                    db.query(Conversation)
+                    .filter(Conversation.user_id == current_user.id, Conversation.is_active == True)
+                    .order_by(Conversation.created_at.desc())
+                    .first()
+                )
+                if not conversation:
+                    conversation = Conversation(user_id=current_user.id, title="New Conversation")
+                    db.add(conversation)
+                    db.commit()
+                    db.refresh(conversation)
+
+                # Determine next turn number
+                last_turn = (
+                    db.query(ConversationTurn)
+                    .filter(ConversationTurn.conversation_id == conversation.id)
+                    .order_by(ConversationTurn.turn_number.desc())
+                    .first()
+                )
+                next_turn_number = (last_turn.turn_number + 1) if last_turn else 1
+
+                elapsed_ms = int((perf_counter() - start_time) * 1000)
+
+                turn = ConversationTurn(
+                    conversation_id=conversation.id,
+                    turn_number=next_turn_number,
+                    user_input=request.message,
+                    ai_response=ai_response,
+                    response_time_ms=elapsed_ms,
+                    voice_used=None,
+                )
+                db.add(turn)
+                db.commit()
+                conversation_id_str = str(conversation.id)
+        except Exception as persist_error:
+            # Do not fail the chat on persistence issues
+            print(f"Warning: failed to persist conversation turn: {persist_error}")
+
         return ChatResponse(
             response=ai_response,
-            conversation_id=str(response.id) if response.id else None
+            conversation_id=conversation_id_str
         )
         
     except anthropic.APIError as e:

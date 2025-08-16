@@ -30,6 +30,18 @@
 .voice-controls-header {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+}
+
+/* Right-side user controls container */
+.user-controls-header {
+  display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 1rem;
   margin-top: 0.75rem;
@@ -115,6 +127,12 @@
   
   .voice-controls-header {
     top: 0.75rem;
+    left: 0.75rem;
+    gap: 0.75rem;
+  }
+
+  .user-controls-header {
+    top: 0.75rem;
     right: 0.75rem;
     gap: 0.75rem;
   }
@@ -137,6 +155,12 @@
   
   .voice-controls-header {
     top: 0.5rem;
+    left: 0.5rem;
+    gap: 0.5rem;
+  }
+
+  .user-controls-header {
+    top: 0.5rem;
     right: 0.5rem;
     gap: 0.5rem;
   }
@@ -146,4 +170,36 @@
     width: 32px;
     height: 32px;
   }
+}
+
+/* User Section */
+.user-section {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-left: 1rem;
+}
+
+.user-info {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.logout-btn {
+  background: rgba(244, 67, 54, 0.2);
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  color: white;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+}
+
+.logout-btn:hover {
+  background: rgba(244, 67, 54, 0.3);
+  transform: scale(1.05);
 }
