@@ -15,7 +15,6 @@ const Login: React.FC = () => {
     <div className="login-container">
       <div className="login-card">
         <div className="login-header">
-          <h1>Comprehension Engine</h1>
           <p>Sign in to start your learning journey</p>
         </div>
 
