@@ -9,6 +9,7 @@ import './FormattedMessage.css';
 interface FormattedMessageProps {
   content: string;
   className?: string;
+  variant?: 'default' | 'lecture';
 }
 
 interface CodeBlockProps {
@@ -56,7 +57,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ code, language = 'text' }) => {
   );
 };
 
-const FormattedMessage: React.FC<FormattedMessageProps> = ({ content, className = '' }) => {
+const FormattedMessage: React.FC<FormattedMessageProps> = ({ content, className = '', variant = 'default' }) => {
   // Convert plain text patterns to markdown if needed
   const convertPlainTextToMarkdown = (text: string): string => {
     return text
@@ -101,7 +102,7 @@ const FormattedMessage: React.FC<FormattedMessageProps> = ({ content, className 
   };
 
   return (
-    <div className={`formatted-message ${className}`}>
+    <div className={`formatted-message ${variant === 'lecture' ? 'formatted-message--lecture' : ''} ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={components}

@@ -3,18 +3,19 @@
 
 /* Header Container */
 .chat-header {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
+  background: var(--surface);
   padding: 1rem;
   text-align: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 
 .chat-header h1 {
   margin: 0;
-  color: white;
+  color: var(--text-primary);
   font-size: 1.5rem;
   font-weight: 600;
   letter-spacing: -0.5px;
@@ -22,7 +23,7 @@
 
 .chat-header p {
   margin: 0.25rem 0 0 0;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   font-size: 0.9rem;
 }
 
@@ -88,8 +89,8 @@
 
 /* Settings Gear Button */
 .settings-gear {
-  background: rgba(255, 255, 255, 0.2);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
   border-radius: 50%;
   width: 40px;
   height: 40px;
@@ -98,13 +99,12 @@
   justify-content: center;
   cursor: pointer;
   transition: all 0.3s ease;
-  color: white;
-  backdrop-filter: blur(10px);
+  color: var(--text-primary);
 }
 
 .settings-gear:hover {
-  background: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.5);
+  background: var(--inline-code-bg);
+  border-color: var(--brand-accent);
   transform: scale(1.05);
 }
 
@@ -112,51 +112,41 @@
 .new-chat-button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  width: 40px; /* match .settings-gear */
   height: 40px; /* match .settings-gear */
-  padding: 0 0.9rem;
-  border-radius: 9999px;
-  background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.18) 0%,
-      rgba(255, 255, 255, 0.10) 100%
-    );
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  color: #fff;
-  font-weight: 600;
-  font-size: 0.9rem;
-  letter-spacing: 0.2px;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
   cursor: pointer;
   transition: all 0.2s ease;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  box-shadow: none;
 }
 
 .new-chat-button:hover {
-  background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.26) 0%,
-      rgba(255, 255, 255, 0.16) 100%
-    );
-  border-color: rgba(255, 255, 255, 0.42);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+  background: var(--inline-code-bg);
+  border-color: var(--border-subtle);
+  transform: none;
+  box-shadow: none;
 }
 
 .new-chat-button:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+  transform: none;
+  box-shadow: none;
 }
 
 .new-chat-button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.45);
+  box-shadow: 0 0 0 3px rgba(103, 92, 233, 0.18);
 }
 
 /* Removed plus badge styles per design */
 
 /* Compatibility Warning */
 .compatibility-warning {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   font-size: 0.8rem;
   font-style: italic;
 }
@@ -185,6 +175,7 @@
   
   /* Keep circular controls compact on mobile; text button retains padding */
   .new-chat-button {
+    width: 36px; /* match .settings-gear at this breakpoint */
     height: 36px; /* match .settings-gear at this breakpoint */
   }
 }
@@ -212,6 +203,7 @@
   
   /* Keep circular controls compact on small screens */
   .new-chat-button {
+    width: 32px; /* match .settings-gear at this breakpoint */
     height: 32px; /* match .settings-gear at this breakpoint */
   }
 }
@@ -225,25 +217,24 @@
 }
 
 .user-info {
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary);
   font-size: 0.9rem;
   font-weight: 500;
 }
 
 .logout-btn {
-  background: rgba(244, 67, 54, 0.2);
-  border: none;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
   border-radius: 0.5rem;
   padding: 0.5rem 1rem;
-  color: white;
+  color: var(--text-primary);
   font-size: 0.8rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
-  backdrop-filter: blur(10px);
 }
 
 .logout-btn:hover {
-  background: rgba(244, 67, 54, 0.3);
+  background: var(--inline-code-bg);
   transform: scale(1.05);
 }

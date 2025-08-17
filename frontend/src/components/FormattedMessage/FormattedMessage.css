@@ -1,7 +1,22 @@
+/* Ensure long content does not break the centered column */
 .formatted-message {
-  line-height: 1.6;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+.formatted-message pre,
+.formatted-message code {
+  max-width: 100%;
+}
+
+.formatted-message .table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+.formatted-message {
+  line-height: var(--line-height-body, 1.65);
   color: inherit;
-  font-family: inherit;
+  font-family: var(--font-sans, inherit);
   word-wrap: break-word;
   overflow-wrap: break-word;
 }
@@ -20,15 +35,15 @@
 }
 
 .formatted-message h1 {
-  font-size: 1.5rem;
+  font-size: var(--h1-size, 1.5rem);
 }
 
 .formatted-message h2 {
-  font-size: 1.3rem;
+  font-size: var(--h2-size, 1.3rem);
 }
 
 .formatted-message h3 {
-  font-size: 1.1rem;
+  font-size: var(--h3-size, 1.1rem);
 }
 
 /* Paragraphs */
@@ -45,11 +60,11 @@
 .formatted-message ul,
 .formatted-message ol {
   margin: 1rem 0;
-  padding-left: 1.5rem;
+  padding-left: var(--list-indent, 1.5rem);
 }
 
 .formatted-message li {
-  margin-bottom: 0.25rem;
+  margin-bottom: var(--li-spacing, 0.25rem);
 }
 
 .formatted-message li > p {
@@ -61,7 +76,7 @@
 .formatted-message ol ol,
 .formatted-message ul ol,
 .formatted-message ol ul {
-  margin: 0.5rem 0;
+  margin: var(--nested-list-spacing, 0.5rem) 0;
 }
 
 /* Tables */
@@ -79,8 +94,8 @@
 }
 
 .formatted-message th {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: var(--brand-accent);
+  color: #ffffff;
   padding: 0.75rem;
   font-weight: 600;
   text-align: left;
@@ -105,7 +120,7 @@
 
 /* Inline Code */
 .formatted-message code {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--inline-code-bg, rgba(0, 0, 0, 0.05));
   padding: 0.2rem 0.4rem;
   border-radius: 4px;
   font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
@@ -180,7 +195,7 @@
   background: none !important;
   padding: 0;
   border-radius: 0;
-  font-size: 0.9rem;
+  font-size: var(--code-font-size, 0.95rem);
   line-height: 1.5;
   color: #e2e8f0;
   font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
@@ -267,7 +282,7 @@
 
 /* Links */
 .formatted-message a {
-  color: #667eea;
+  color: var(--link);
   text-decoration: none;
 }
 
@@ -294,15 +309,15 @@
 /* Mobile responsiveness */
 @media (max-width: 768px) {
   .formatted-message h1 {
-    font-size: 1.3rem;
+    font-size: calc(var(--h1-size, 1.5rem) - 0.2rem);
   }
   
   .formatted-message h2 {
-    font-size: 1.2rem;
+    font-size: calc(var(--h2-size, 1.3rem) - 0.15rem);
   }
   
   .formatted-message h3 {
-    font-size: 1.1rem;
+    font-size: calc(var(--h3-size, 1.1rem) - 0.05rem);
   }
   
   .formatted-message table {
@@ -319,7 +334,7 @@
   }
   
   .formatted-message pre code {
-    font-size: 0.8rem !important;
+    font-size: calc(var(--code-font-size, 0.95rem) - 0.15rem) !important;
   }
   
   .formatted-message ul,
@@ -339,6 +354,11 @@
     font-size: 0.6rem;
     padding: 0.2rem 0.4rem;
   }
+}
+
+/* Lecture variant: constrain width for readability */
+.formatted-message--lecture {
+  max-width: var(--content-max-width, 780px);
 }
 
 /* Dark mode support */

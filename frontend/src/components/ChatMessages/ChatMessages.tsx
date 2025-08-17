@@ -1,5 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import FormattedMessage from '../FormattedMessage';
+import AssistantBlock from './AssistantBlock';
+import UserChip from './UserChip';
 import './ChatMessages.css';
 
 interface Message {
@@ -24,33 +26,37 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({ messages, isLoading }) => {
 
   return (
     <div className="messages-container">
-      {messages.map((message) => (
-        <div
-          key={message.id}
-          className={`message ${message.sender === 'user' ? 'user-message' : 'assistant-message'}`}
-        >
-          <div className="message-content">
-            <FormattedMessage content={message.content} />
+      <div className="messages-column">
+        {messages.map((message) => (
+          <div
+            key={message.id}
+            className={`message ${message.sender === 'user' ? 'user-message' : 'assistant-message'}`}
+          >
+            {message.sender === 'assistant' ? (
+              <AssistantBlock content={message.content} timestamp={message.timestamp} />
+            ) : (
+              <UserChip content={message.content} timestamp={message.timestamp} />
+            )}
           </div>
-          <div className="message-timestamp">
-            {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </div>
-        </div>
-      ))}
-      
-      {isLoading && (
-        <div className="message assistant-message">
-          <div className="message-content">
-            <div className="typing-indicator">
-              <span></span>
-              <span></span>
-              <span></span>
+        ))}
+
+        {isLoading && (
+          <div className="message assistant-message">
+            <div className="assistant-block">
+              <div className="assistant-block__content">
+                <div className="typing-indicator">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-      
-      <div ref={messagesEndRef} />
+        )}
+
+        {/* Keep the scroll sentinel at the very bottom of the column */}
+        <div ref={messagesEndRef} />
+      </div>
     </div>
   );
 };

@@ -385,73 +385,93 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
     return () => { isCancelled = true; };
   }, [conversationId, conversationService, hydrateFromTurns, clearMessages]);
 
+  const overlayEnabled = process.env.REACT_APP_VOICE_OVERLAY_ENABLED === 'true';
+
   return (
     <div className="chat-container">
-      <ChatHeader
-        onSettingsOpen={() => setIsSettingsOpen(true)}
-        isSpeechRecognitionSupported={isSpeechRecognitionSupported}
-        onHistoryToggle={() => setIsHistoryOpen(v => !v)}
-      />
-      {/* History Modal */}
-      <HistoryDrawer
-        isOpen={isHistoryOpen}
-        conversations={conversations}
-        isLoading={isHistoryLoading}
-        onClose={() => setIsHistoryOpen(false)}
-        onLoadMore={loadMore}
-        hasMore={hasMore}
-        onSelect={(id) => { navigate(`/c/${id}`); }}
-        onRename={async (id, title) => { await renameConversation(id, title); await refreshList(); }}
-      />
-      
-      {/* Voice Mode Interface */}
-      {isVoiceMode ? (
-        (() => {
-          return (
-            <VoiceMode
-              transcriptionText={transcriptionText}
-              isSpeaking={isSpeaking}
-              isRecording={isRecognitionRecording}
-              isInCooldown={isInCooldown}
-              isAudioSettling={isAudioSettling}
-              isLoading={isLoading || isSendingMessage}
-              forcedSilenceEndTime={forcedSilenceEndTime}
-              onExit={exitVoiceMode}
-              onSendMessage={() => handleSendMessage()}
-              onForceActivate={forceMicrophoneActivation}
-            />
-          );
-        })()
-      ) : (
-        <>
-          <ChatMessages
-            messages={messages}
-            isLoading={isLoading}
-          />
+      <div className={`chat-content${overlayEnabled && isVoiceMode ? ' chat-blurred' : ''}`}>
+        <ChatHeader
+          onSettingsOpen={() => setIsSettingsOpen(true)}
+          isSpeechRecognitionSupported={isSpeechRecognitionSupported}
+          onHistoryToggle={() => setIsHistoryOpen(v => !v)}
+        />
+        {/* History Modal */}
+        <HistoryDrawer
+          isOpen={isHistoryOpen}
+          conversations={conversations}
+          isLoading={isHistoryLoading}
+          onClose={() => setIsHistoryOpen(false)}
+          onLoadMore={loadMore}
+          hasMore={hasMore}
+          onSelect={(id) => { navigate(`/c/${id}`); }}
+          onRename={async (id, title) => { await renameConversation(id, title); await refreshList(); }}
+        />
 
-          <ChatInput
-            onSendMessage={handleSendMessage}
-            onVoiceActivate={toggleVoiceRecording}
-            isLoading={isLoading}
+        {/* Main content area */}
+        {(!overlayEnabled && isVoiceMode) ? (
+          // Legacy voice mode replaces chat content when overlay is disabled
+          <VoiceMode
+            transcriptionText={transcriptionText}
+            isSpeaking={isSpeaking}
             isRecording={isRecognitionRecording}
             isInCooldown={isInCooldown}
-            isSpeechRecognitionSupported={isSpeechRecognitionSupported}
-            microphonePermission={voiceState.microphonePermission}
+            isAudioSettling={isAudioSettling}
+            isLoading={isLoading || isSendingMessage}
+            forcedSilenceEndTime={forcedSilenceEndTime}
+            onExit={exitVoiceMode}
+            onSendMessage={() => handleSendMessage()}
+            onForceActivate={forceMicrophoneActivation}
           />
+        ) : (
+          // Normal chat view (or when overlay is active, we hide messages/input below via blur)
+          <>
+            <ChatMessages
+              messages={messages}
+              isLoading={isLoading}
+            />
+            <ChatInput
+              onSendMessage={handleSendMessage}
+              onVoiceActivate={toggleVoiceRecording}
+              isLoading={isLoading}
+              isRecording={isRecognitionRecording}
+              isInCooldown={isInCooldown}
+              isSpeechRecognitionSupported={isSpeechRecognitionSupported}
+              microphonePermission={voiceState.microphonePermission}
+            />
+          </>
+        )}
 
-        </>
+        {/* Settings Panel */}
+        <SettingsPanel
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          selectedVoice={selectedVoice}
+          onVoiceChange={setSelectedVoice}
+          voices={availableVoices}
+          voiceEnabled={voiceState.voiceEnabled}
+          onVoiceToggle={toggleVoiceOutput}
+        />
+      </div>
+
+      {/* Overlay Voice Mode */}
+      {overlayEnabled && isVoiceMode && (
+        <VoiceMode
+          transcriptionText={transcriptionText}
+          isSpeaking={isSpeaking}
+          isRecording={isRecognitionRecording}
+          isInCooldown={isInCooldown}
+          isAudioSettling={isAudioSettling}
+          isLoading={isLoading || isSendingMessage}
+          forcedSilenceEndTime={forcedSilenceEndTime}
+          onExit={exitVoiceMode}
+          onSendMessage={() => handleSendMessage()}
+          onForceActivate={forceMicrophoneActivation}
+          overlay={true}
+          contextMessages={messages.slice(-2)}
+        />
       )}
-      
-      {/* Settings Panel */}
-      <SettingsPanel
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        selectedVoice={selectedVoice}
-        onVoiceChange={setSelectedVoice}
-        voices={availableVoices}
-        voiceEnabled={voiceState.voiceEnabled}
-        onVoiceToggle={toggleVoiceOutput}
-      />
+
+      {/* No bottom fallback; legacy mode is rendered inside chat-content above */}
     </div>
   );
 };

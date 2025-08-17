@@ -30,7 +30,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
         <div className="settings-content">
           {/* Voice Settings Section */}
           <div className="settings-section">
-            <h4>Voice Settings</h4>
+            <h4 className="settings-title settings-title--divider">Voice Settings</h4>
             
             {/* Voice Toggle */}
             <div className="setting-item">
@@ -49,7 +49,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
           {/* AI Voice Section */}
           {voiceEnabled && voices.length > 0 && (
             <div className="settings-section">
-              <h4>AI Voice</h4>
+              <h4 className="settings-title settings-title--divider">AI Voice</h4>
               <div className="setting-item">
                 <VoiceSelector
                   selectedVoice={selectedVoice}
@@ -62,7 +62,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
           
           {/* About Section */}
           <div className="settings-section">
-            <h4>About</h4>
+            <h4 className="settings-title settings-title--divider">About</h4>
             <p className="settings-about">
               This app uses ElevenLabs AI voices for natural, human-like speech synthesis.
             </p>

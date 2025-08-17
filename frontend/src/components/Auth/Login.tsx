@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import './Login.css';
 
 const Login: React.FC = () => {
   const { loginWithGoogle } = useAuth();
+  const [showEmail, setShowEmail] = useState(false);
+  const [email, setEmail] = useState('');
 
 
 
@@ -11,12 +13,15 @@ const Login: React.FC = () => {
     loginWithGoogle();
   };
 
+  const loginVariant = process.env.REACT_APP_LOGIN_MOTIF || 'motif';
+  const containerClass = `login-container ${loginVariant === 'animated' ? 'motif-animated' : loginVariant === 'minimal' ? 'motif-minimal' : 'motif'}`;
+
   return (
-    <div className="login-container">
+    <div className={containerClass}>
       <div className="login-card">
         <div className="login-header">
-          <h1>Comprehension Engine</h1>
-          <p>Sign in to start your learning journey</p>
+          <h1 className="hero-title">Your AI Tutor</h1>
+          <p className="hero-subtitle">Master complex concepts, one conversation at a time.</p>
         </div>
 
 
@@ -24,7 +29,7 @@ const Login: React.FC = () => {
         <div className="login-options">
           <button
             type="button"
-            className="google-login-btn"
+            className="google-login-btn btn-xl"
             onClick={handleGoogleLogin}
           >
             <svg className="google-icon" viewBox="0 0 24 24">
@@ -35,6 +40,34 @@ const Login: React.FC = () => {
             </svg>
             Continue with Google
           </button>
+          <div className="login-subcopy">We’ll never post or share without your permission.</div>
+
+          <div className="divider"><span>or</span></div>
+
+          {!showEmail ? (
+            <button
+              type="button"
+              className="email-login-btn"
+              onClick={() => setShowEmail(true)}
+            >
+              Continue with Email
+            </button>
+          ) : (
+            <form className="email-form" onSubmit={(e) => { e.preventDefault(); }}>
+              <input
+                type="email"
+                className="email-input"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+              <button type="submit" className="email-submit-btn" disabled>
+                Continue
+              </button>
+              <div className="login-subcopy small">Email sign-in coming soon</div>
+            </form>
+          )}
         </div>
 
 

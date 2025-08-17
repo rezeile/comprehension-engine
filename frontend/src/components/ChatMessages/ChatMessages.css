@@ -3,7 +3,8 @@
 
 /* Messages Container */
 .messages-container {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0; /* ensure header/footer remain in view */
   overflow-y: auto;
   padding: 1rem;
   display: flex;
@@ -12,10 +13,25 @@
   scroll-behavior: smooth;
 }
 
+/* Centered column wrapper */
+.messages-column {
+  width: 100%;
+  max-width: var(--content-max-width, 780px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem; /* generous breathing room between blocks (≈32px) */
+}
+
 /* Message Styles */
 .message {
   max-width: 85%;
   animation: fadeInUp 0.3s ease-out;
+}
+
+/* In centered layout, allow messages to take full column width */
+.messages-column .message {
+  max-width: 100%;
 }
 
 .user-message {
@@ -24,6 +40,19 @@
 
 .assistant-message {
   align-self: flex-start;
+}
+
+/* Neutralize side alignment in centered layout */
+.messages-column .user-message,
+.messages-column .assistant-message {
+  align-self: auto;
+}
+
+/* Right-align user message wrapper inside the centered column */
+.messages-column .user-message {
+  align-self: flex-end;
+  width: auto;
+  max-width: 100%;
 }
 
 .message-content {
@@ -115,8 +144,15 @@
     gap: 0.75rem;
   }
   
+  .messages-column {
+    gap: 1.5rem; /* ~24px on tablet/smaller screens */
+  }
+  
   .message {
     max-width: 90%;
+  }
+  .messages-column .message {
+    max-width: 100%;
   }
   
   .message-content {
@@ -131,12 +167,78 @@
     gap: 0.5rem;
   }
   
+  .messages-column {
+    gap: 1.25rem; /* ~20px on small phones */
+  }
+  
   .message {
     max-width: 95%;
+  }
+  .messages-column .message {
+    max-width: 100%;
   }
   
   .message-content {
     padding: 0.5rem 0.7rem;
     font-size: 0.9rem;
   }
+}
+
+/* ============================= */
+/* New Skin: Assistant/User styles */
+/* ============================= */
+
+.assistant-block {
+  max-width: var(--content-max-width, 780px);
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+/* Slightly narrower and lightweight user contribution in centered layout */
+.messages-column .user-chip {
+  display: inline-block; /* content-hugging */
+  background: rgba(99, 102, 241, 0.04); /* subtle brand tint */
+  border: none; /* no border */
+  box-shadow: none;
+  border-radius: 10px; /* not pill */
+  padding: 10px 12px; /* comfortable padding */
+  max-width: 60ch; /* readable line length */
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* De-emphasize user text color and weight */
+.messages-column .user-chip .formatted-message {
+  color: inherit; /* inherit app text color */
+}
+
+
+.assistant-block__meta {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.user-chip {
+  background: var(--user-chip-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--user-chip-border, var(--border-subtle));
+  border-radius: 16px;
+  padding: 0.5rem 0.75rem;
+  max-width: 75vw;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+
+.user-chip__meta {
+  margin-top: 0.25rem;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  text-align: right;
 }

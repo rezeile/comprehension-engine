@@ -16,24 +16,21 @@
   left: -400px;
   width: 400px;
   height: 100vh;
-  background:
-    linear-gradient(180deg,
-      rgba(102,126,234,0.16) 0%,
-      rgba(118,75,162,0.14) 100%
-    ),
-    rgba(255,255,255,0.06);
-  backdrop-filter: blur(12px);
-  border-right: 1px solid rgba(255, 255, 255, 0.18);
+  background: var(--surface);
+  border-right: 1px solid var(--border-subtle);
   z-index: 999;
   transition: left 0.25s ease;
   overflow-y: auto;
-  box-shadow:
-    0 8px 30px rgba(118, 75,162, 0.25),
-    0 2px 10px rgba(102,126,234, 0.12);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
 }
 
 .settings-panel.open {
   left: 0;
+}
+
+/* Add subtle divider under the Settings title (panel header) */
+#settings-panel .slide-panel-header {
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .settings-header {
@@ -41,25 +38,26 @@
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  background: transparent;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface);
 }
 
 .settings-header h3 {
   margin: 0;
-  color: #ffffff;
-  font-size: 20px;
+  color: var(--text-primary);
+  font-size: 1.1rem;
   font-weight: 600;
+  letter-spacing: -0.2px;
 }
 
 .settings-close-btn {
-  background: rgba(255, 255, 255, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: #ffffff;
-  font-size: 18px;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-size: 16px;
   cursor: pointer;
-  padding: 4px;
-  border-radius: 8px;
+  padding: 0;
+  border-radius: 50%;
   transition: all 0.2s ease;
   width: 28px;
   height: 28px;
@@ -69,11 +67,11 @@
 }
 
 .settings-close-btn:hover {
-  background: rgba(255, 255, 255, 0.26);
+  background: var(--inline-code-bg);
 }
 
 .settings-content {
-  padding: 24px;
+  padding: 16px 20px;
 }
 
 .settings-section {
@@ -81,12 +79,17 @@
 }
 
 .settings-section h4 {
-  margin: 0 0 16px 0;
-  color: #ffffff;
-  font-size: 16px;
+  margin: 0 0 12px 0;
+  color: var(--text-primary);
+  font-size: 0.95rem;
   font-weight: 600;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: none;
   padding-bottom: 8px;
+}
+
+/* Minimal dividers only for the three requested headings */
+.settings-title.settings-title--divider {
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .setting-item {
@@ -96,8 +99,8 @@
 .setting-label {
   display: flex;
   align-items: center;
-  color: #e2e8f0;
-  font-size: 14px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
   cursor: pointer;
   user-select: none;
 }
@@ -108,43 +111,34 @@
 }
 
 .debug-btn {
-  background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.18) 0%,
-      rgba(255, 255, 255, 0.10) 100%
-    );
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  color: #fff;
-  padding: 10px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  padding: 12px 14px; /* increased vertical padding to match voice selector */
   border-radius: 10px;
-  font-size: 14px;
+  font-size: 0.95rem;
   cursor: pointer;
   transition: all 0.2s ease;
   width: 100%;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 
 .debug-btn:hover {
-  background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.26) 0%,
-      rgba(255, 255, 255, 0.16) 100%
-    );
-  border-color: rgba(255, 255, 255, 0.42);
+  background: var(--inline-code-bg);
+  border-color: var(--border-subtle);
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.12);
 }
 
 .debug-btn.danger {
-  background: rgba(220, 38, 38, 0.3);
-  border-color: rgba(239, 68, 68, 0.6);
-  color: #ffffff;
+  background: var(--surface);
+  border-color: var(--border-subtle);
+  color: #EF4444; /* only the label is red */
 }
 
 .debug-btn.danger:hover {
-  background: rgba(220, 38, 38, 0.4);
-  border-color: rgba(239, 68, 68, 0.75);
+  background: var(--inline-code-bg);
+  border-color: var(--border-subtle);
 }
 
 .setting-checkbox {
@@ -152,13 +146,10 @@
   accent-color: #4f46e5;
 }
 
-.settings-about {
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 14px;
-  line-height: 1.6;
-  margin: 0;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-}
+.settings-about { color: var(--text-primary); font-size: 0.95rem; line-height: 1.6; margin: 0; }
+
+/* extra separation above logout section for grouping clarity */
+.settings-section:last-of-type { margin-top: 40px; padding-top: 16px; }
 
 /* Mobile Responsiveness */
 @media (max-width: 768px) {

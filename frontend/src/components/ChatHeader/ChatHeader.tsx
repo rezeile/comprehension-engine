@@ -50,7 +50,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
           title="Start a new chat"
           aria-label="Start a new chat"
         >
-          New Chat
+          <Icons.Plus width={20} height={20} />
         </button>
         {!isSpeechRecognitionSupported && (
           <span className="compatibility-warning">Voice input not supported in this browser</span>

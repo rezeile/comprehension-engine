@@ -3,31 +3,78 @@
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--bg-app);
   padding: 20px;
+  position: relative;
+}
+
+/* Optional soft academic gradient motif */
+.login-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(1200px 600px at 10% -20%, rgba(103, 92, 233, 0.06), transparent 50%),
+              radial-gradient(900px 500px at 120% 0%, rgba(118, 75, 162, 0.06), transparent 50%);
+}
+
+/* Background motif variants */
+.login-container.motif-minimal::before {
+  background: radial-gradient(900px 520px at 0% -10%, rgba(103,92,233,0.05), transparent 40%);
+}
+
+.login-container.motif-animated::before {
+  animation: hueShift 18s linear infinite;
+}
+
+@keyframes hueShift {
+  0% { filter: hue-rotate(0deg) saturate(100%); }
+  50% { filter: hue-rotate(12deg) saturate(110%); }
+  100% { filter: hue-rotate(0deg) saturate(100%); }
 }
 
 .login-card {
-  background: white;
+  background: var(--surface);
   border-radius: 16px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-  padding: 32px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  padding: 44px 40px;
   width: 100%;
-  max-width: 320px;
+  max-width: 560px;
   text-align: center;
+  border: 1px solid var(--border-subtle);
+}
+
+.brand-mark {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.brand-mark__logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(103, 92, 233, 0.25);
 }
 
 .login-header h1 {
-  color: #333;
-  margin: 0 0 8px 0;
-  font-size: 22px;
-  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  font-size: 48px;
+  font-weight: 800;
+}
+
+.hero-title {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .login-header p {
-  color: #666;
-  margin: 0 0 24px 0;
-  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 10px 0 28px 0;
+  font-size: 18px;
 }
 
 .error-message {
@@ -51,10 +98,10 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  background: white;
-  color: #333;
-  border: 2px solid #ddd;
-  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
   padding: 12px 16px;
   font-size: 15px;
   font-weight: 500;
@@ -63,11 +110,85 @@
   width: 100%;
 }
 
+.btn-xl {
+  padding: 16px 20px;
+  font-size: 16px;
+}
+
 .google-login-btn:hover {
-  border-color: #ccc;
-  background: #f8f9fa;
+  border-color: var(--brand-accent);
+  background: var(--inline-code-bg);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.login-subcopy {
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+.email-login-btn {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface);
+  padding: 10px 14px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.email-login-btn:hover {
+  background: var(--inline-code-bg);
+  border-color: var(--brand-accent);
+}
+
+.email-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.email-input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface);
+  padding: 12px 14px;
+  color: var(--text-primary);
+}
+
+.email-submit-btn {
+  width: 100%;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  border: none;
+  padding: 12px 16px;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.login-subcopy.small {
+  font-size: 11px;
 }
 
 .google-login-btn:disabled {

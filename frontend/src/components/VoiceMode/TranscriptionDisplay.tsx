@@ -77,10 +77,8 @@ const TranscriptionDisplay: React.FC<TranscriptionDisplayProps> = ({
             )}
           </div>
         ) : (
-          // Show "start speaking" prompt when ready
-          <div className="transcription-textarea" style={{ color: 'rgba(255, 255, 255, 0.5)', fontStyle: 'italic', textAlign: 'center' }}>
-            Start speaking...
-          </div>
+          // Empty state: rely on CSS placeholder (:empty::before)
+          <div className="transcription-textarea" />
         )}
       </div>
     </div>

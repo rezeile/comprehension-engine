@@ -8,10 +8,12 @@
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: transparent;
   padding: 2rem;
   position: relative;
   overflow: hidden;
+  width: 100%;
+  height: 100%;
 }
 
 .voice-mode-interface::before {
@@ -35,6 +37,11 @@
   text-align: center;
   z-index: 1;
   position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
 }
 
 /* Voice Status Display */
@@ -53,11 +60,11 @@
 }
 
 .voice-mode-indicator p {
-  color: white;
+  color: var(--text-primary);
   font-size: 1.2rem;
   font-weight: 500;
   margin: 0;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  text-shadow: none;
 }
 
 /* Speaking Waves Animation */
@@ -99,11 +106,10 @@
 }
 
 .transcription-display {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
+  background: var(--user-chip-bg);
   border-radius: 16px;
-  padding: 1.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--user-chip-border, var(--border-subtle));
   margin-bottom: 1rem;
   min-height: 80px;
   display: flex;
@@ -111,7 +117,7 @@
 }
 
 .transcription-textarea {
-  color: white;
+  color: var(--text-primary);
   font-size: 1.1rem;
   line-height: 1.6;
   margin: 0;
@@ -124,8 +130,9 @@
 
 .transcription-textarea:empty::before {
   content: "Start speaking...";
-  color: rgba(255, 255, 255, 0.5);
-  font-style: italic;
+  color: var(--text-primary);
+  font-style: normal;
+  opacity: 1;
 }
 
 .interim-text {
@@ -170,8 +177,8 @@
 }
 
 .voice-control-btn {
-  background: rgba(255, 255, 255, 0.2);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
   border-radius: 50%;
   width: 56px;
   height: 56px;
@@ -179,41 +186,41 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.3s ease;
-  color: white;
-  backdrop-filter: blur(10px);
+  transition: all 0.2s ease;
+  color: var(--text-primary);
 }
 
 .voice-control-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.5);
-  transform: scale(1.05);
+  background: var(--inline-code-bg);
+  border-color: var(--brand-accent);
+  transform: translateY(-1px);
 }
 
 .voice-control-btn:disabled {
-  opacity: 0.5;
+  opacity: 1;
   cursor: not-allowed;
   transform: none;
 }
 
 .voice-control-btn.cancel-btn {
-  background: rgba(244, 67, 54, 0.3);
-  border-color: rgba(244, 67, 54, 0.6);
+  background: #e53e3e; /* darker danger */
+  border-color: #c53030;
+  color: #fff;
 }
 
 .voice-control-btn.cancel-btn:hover {
-  background: rgba(244, 67, 54, 0.4);
-  border-color: rgba(244, 67, 54, 0.8);
+  background: #c53030;
+  border-color: #9b2c2c;
 }
 
 .voice-control-btn.send-btn {
-  background: rgba(76, 175, 80, 0.3);
-  border-color: rgba(76, 175, 80, 0.6);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: transparent;
+  color: #fff;
 }
 
 .voice-control-btn.send-btn:hover:not(:disabled) {
-  background: rgba(76, 175, 80, 0.4);
-  border-color: rgba(76, 175, 80, 0.8);
+  filter: brightness(0.9);
 }
 
 /* Mobile Responsiveness */
@@ -261,4 +268,129 @@
   .voice-mode-indicator p {
     font-size: 1rem;
   }
+}
+
+/* Overlay positioning and background */
+.voice-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(4px);
+}
+
+.voice-overlay .voice-mode-content {
+  animation: voiceOverlayScaleIn 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes voiceOverlayScaleIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Context bubbles within overlay */
+.voice-context {
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin-bottom: 1rem;
+  opacity: 0.55;
+  max-height: 30vh;
+  overflow: auto;
+}
+
+.voice-context .assistant-block,
+.voice-context .user-chip {
+  box-shadow: none;
+  border: none;
+}
+
+.voice-context-item { margin-bottom: 12px; }
+
+/* Mic visualizer (bars) */
+.mic-visualizer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
+}
+
+.mic-visualizer--bars span {
+  width: 6px;
+  height: 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  opacity: 1;
+  border-radius: 3px;
+  transform-origin: bottom center;
+  animation: micBarPulse 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+.mic-visualizer--bars span.active { opacity: 0.9; }
+
+@keyframes micBarPulse {
+  0%, 40%, 100% { transform: scaleY(0.4); }
+  20% { transform: scaleY(1); }
+}
+
+/* Single-wave visual for user speaking */
+.mic-single-wave {
+  height: 28px;
+  display: flex;
+  align-items: flex-end;
+}
+
+.mic-single-wave span {
+  width: 44px;
+  height: 100%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 4px;
+  transform-origin: center bottom;
+  animation: singleWave 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+@keyframes singleWave {
+  0%, 40%, 100% { transform: scaleY(0.45); }
+  20% { transform: scaleY(1); }
+}
+
+/* AI speaking: pulsing ring */
+.mic-ring {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  position: relative;
+}
+
+.mic-ring::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  animation: ringPulse 1.5s ease-in-out infinite;
+}
+
+.mic-ring--ai {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.mic-ring--ai::after {
+  border-color: rgba(103, 92, 233, 0.35);
+}
+
+.mic-ring--neutral {
+  background: var(--inline-code-bg);
+}
+
+.mic-ring--neutral::after {
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+@keyframes ringPulse {
+  0% { transform: scale(1); opacity: 1; }
+  70% { transform: scale(1.3); opacity: 0; }
+  100% { transform: scale(1.3); opacity: 0; }
 }

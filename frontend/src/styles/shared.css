@@ -1,5 +1,50 @@
 /* Shared CSS Utilities - DRY Principle Implementation */
 
+/* Typography Tokens (Light mode first) */
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+
+  --line-height-body: 1.65;
+  --h1-size: 1.55rem;
+  --h2-size: 1.35rem;
+  --h3-size: 1.15rem;
+
+  --content-max-width: 780px;
+  --list-indent: 1.5rem;
+  --li-spacing: 0.35rem;
+  --nested-list-spacing: 0.5rem;
+  --code-font-size: 0.95rem;
+
+  /* Color Tokens (Light) */
+  --bg-app: #F7F8FA;
+  --surface: #FFFFFF;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --border-subtle: #E6E8EE;
+  --brand-accent: #675CE9;
+  --brand-accent-strong: #5B4EE8;
+  --user-chip-bg: #F6F8FF; /* softer, lighter tint */
+  --user-chip-border: rgba(103, 92, 233, 0.18); /* subtle brand-tinted outline */
+  --link: var(--brand-accent-strong);
+  --inline-code-bg: #F1F3F8;
+}
+
+/* Dark mode tokens (deferred activation) */
+:root[data-theme="dark"] {
+  --bg-app: #0B1020;
+  --surface: #121933;
+  --text-primary: #E6EDF7;
+  --text-secondary: #9FB0C7;
+  --border-subtle: #273050;
+  --brand-accent: #8F84FF;
+  --brand-accent-strong: #B0A9FF;
+  --user-chip-bg: #1A2A4A;
+  --user-chip-border: rgba(176, 169, 255, 0.24);
+  --link: var(--brand-accent-strong);
+  --inline-code-bg: #1B2442;
+}
+
 /* Common Button Patterns */
 .btn-circular {
   background: rgba(255, 255, 255, 0.2);

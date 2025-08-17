@@ -1,8 +1,11 @@
 import React from 'react';
-import { CloseIcon, SendIcon } from '../Icons';
+// icons are handled in controls; no direct usage here
 import VoiceStatusIndicator from './VoiceStatusIndicator';
 import TranscriptionDisplay from './TranscriptionDisplay';
 import VoiceModeControls from './VoiceModeControls';
+import AssistantBlock from '../ChatMessages/AssistantBlock';
+import UserChip from '../ChatMessages/UserChip';
+import { Message } from '../../types/chat.types';
 import './VoiceMode.css';
 
 interface VoiceModeProps {
@@ -16,6 +19,8 @@ interface VoiceModeProps {
   onExit: () => void;
   onSendMessage: () => void;
   onForceActivate: () => void;
+  overlay?: boolean;
+  contextMessages?: Message[];
 }
 
 const VoiceMode: React.FC<VoiceModeProps> = ({
@@ -28,11 +33,28 @@ const VoiceMode: React.FC<VoiceModeProps> = ({
   forcedSilenceEndTime,
   onExit,
   onSendMessage,
-  onForceActivate
+  onForceActivate,
+  overlay = false,
+  contextMessages = []
 }) => {
   return (
-    <div className="voice-mode-interface">
+    <div className={`voice-mode-interface${overlay ? ' voice-overlay' : ''}`}>
       <div className="voice-mode-content">
+        {overlay && contextMessages.length > 0 && (
+          <div className="voice-context" aria-live="off">
+            {contextMessages.map((m) => (
+              m.sender === 'assistant' ? (
+                <div key={m.id} className="voice-context-item">
+                  <AssistantBlock content={m.content} timestamp={m.timestamp} />
+                </div>
+              ) : (
+                <div key={m.id} className="voice-context-item">
+                  <UserChip content={m.content} timestamp={m.timestamp} />
+                </div>
+              )
+            ))}
+          </div>
+        )}
         <VoiceStatusIndicator
           isSpeaking={isSpeaking}
           isRecording={isRecording}

@@ -112,6 +112,26 @@ export const SendIcon: React.FC<IconProps> = ({
   </svg>
 );
 
+// Plus icon for creating a new chat
+export const PlusIcon: React.FC<IconProps> = ({
+  width = 20,
+  height = 20,
+  className = '',
+  stroke = 'currentColor'
+}) => (
+  <svg
+    width={width}
+    height={height}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path d="M12 5V19" stroke={stroke} strokeWidth="2" strokeLinecap="round" />
+    <path d="M5 12H19" stroke={stroke} strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
 // Settings gear icon used in ChatInterface
 export const SettingsIcon: React.FC<IconProps> = ({ 
   width = 20, 
@@ -162,6 +182,7 @@ export const Icons = {
   Send: SendIcon,
   Settings: SettingsIcon,
   History: HistoryIcon,
+  Plus: PlusIcon,
 };
 
 export default Icons;

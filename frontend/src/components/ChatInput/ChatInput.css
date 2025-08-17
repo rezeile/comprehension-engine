@@ -8,6 +8,9 @@
   padding: 1rem;
   border-top: 1px solid rgba(255, 255, 255, 0.2);
   flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
 }
 
 .input-wrapper {

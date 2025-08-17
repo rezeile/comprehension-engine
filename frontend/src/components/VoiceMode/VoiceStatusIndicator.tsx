@@ -16,35 +16,19 @@ const VoiceStatusIndicator: React.FC<VoiceStatusIndicatorProps> = ({
       <div className="voice-mode-indicator">
         {isLoading ? (
           <>
-            <div className="speaking-waves">
-              <span></span>
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
+            <div className="mic-ring mic-ring--neutral" aria-hidden />
             <p>Just a sec... sending message</p>
           </>
         ) : isSpeaking ? (
           <>
-            <div className="speaking-waves">
-              <span></span>
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
+            <div className="mic-ring mic-ring--ai" aria-hidden />
             <p>Antoni is speaking...</p>
           </>
         ) : (
-          // Show waves for any listening state (including when first entering voice mode)
-          <>
-            <div className="speaking-waves">
-              <span></span>
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            <p>Start speaking...</p>
-          </>
+          // Listening (user speaking): single bar waveform
+          <div className="mic-single-wave" aria-hidden>
+            <span></span>
+          </div>
         )}
       </div>
     </div>
