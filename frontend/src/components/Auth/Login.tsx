@@ -20,7 +20,7 @@ const Login: React.FC = () => {
     <div className={containerClass}>
       <div className="login-card">
         <div className="login-header">
-          <h1 className="hero-title">Your AI Tutor</h1>
+          <h1 className="hero-title">The Comprehension Engine</h1>
           <p className="hero-subtitle">Master complex concepts, one conversation at a time.</p>
         </div>
 
