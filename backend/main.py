@@ -56,9 +56,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",  # React dev server
         "http://127.0.0.1:3000",  # Alternative localhost
-        "https://ai-tutor-frontend-gold.vercel.app",  # Production Vercel frontend
-        "https://ai-tutor-frontend-ofkj3zd0b-rezeiles-projects.vercel.app",  # Vercel frontend
-        "https://comprehension-engine-production.up.railway.app",  # Railway backend (for OAuth redirects)
+        "https://demo.brightspring.ai",  # Production frontend
+        "https://api.brightspring.ai",  # Production backend (for OAuth redirects)
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Explicitly specify methods
