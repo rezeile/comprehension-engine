@@ -108,6 +108,52 @@
   transform: scale(1.05);
 }
 
+/* New Chat Button */
+.new-chat-button {
+  display: inline-flex;
+  align-items: center;
+  height: 40px; /* match .settings-gear */
+  padding: 0 0.9rem;
+  border-radius: 9999px;
+  background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.18) 0%,
+      rgba(255, 255, 255, 0.10) 100%
+    );
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.9rem;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.new-chat-button:hover {
+  background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.26) 0%,
+      rgba(255, 255, 255, 0.16) 100%
+    );
+  border-color: rgba(255, 255, 255, 0.42);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+}
+
+.new-chat-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+}
+
+.new-chat-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.45);
+}
+
+/* Removed plus badge styles per design */
+
 /* Compatibility Warning */
 .compatibility-warning {
   color: rgba(255, 255, 255, 0.7);
@@ -137,10 +183,9 @@
     gap: 0.75rem;
   }
   
-  .voice-toggle,
-  .settings-gear {
-    width: 36px;
-    height: 36px;
+  /* Keep circular controls compact on mobile; text button retains padding */
+  .new-chat-button {
+    height: 36px; /* match .settings-gear at this breakpoint */
   }
 }
 
@@ -165,10 +210,9 @@
     gap: 0.5rem;
   }
   
-  .voice-toggle,
-  .settings-gear {
-    width: 32px;
-    height: 32px;
+  /* Keep circular controls compact on small screens */
+  .new-chat-button {
+    height: 32px; /* match .settings-gear at this breakpoint */
   }
 }
 

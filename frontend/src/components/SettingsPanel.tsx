@@ -1,4 +1,5 @@
 import React from 'react';
+import SlidePanel from './SlidePanel/SlidePanel';
 import { useAuth } from '../context/AuthContext';
 import VoiceSelector from './VoiceSelector';
 import { Voice } from '../services/VoiceService';
@@ -25,25 +26,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
 }) => {
   const { logout } = useAuth();
   return (
-    <>
-      {/* Backdrop */}
-      {isOpen && (
-        <div className="settings-backdrop" onClick={onClose} />
-      )}
-      
-      {/* Settings Panel */}
-      <div className={`settings-panel ${isOpen ? 'open' : ''}`}>
-        <div className="settings-header">
-          <h3>Settings</h3>
-          <button 
-            className="settings-close-btn"
-            onClick={onClose}
-            aria-label="Close settings"
-          >
-            ×
-          </button>
-        </div>
-        
+    <SlidePanel isOpen={isOpen} onClose={onClose} title="Settings" id="settings-panel">
         <div className="settings-content">
           {/* Voice Settings Section */}
           <div className="settings-section">
@@ -61,9 +44,12 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 Enable Voice Output
               </label>
             </div>
-            
-            {/* Voice Selector */}
-            {voiceEnabled && voices.length > 0 && (
+          </div>
+
+          {/* AI Voice Section */}
+          {voiceEnabled && voices.length > 0 && (
+            <div className="settings-section">
+              <h4>AI Voice</h4>
               <div className="setting-item">
                 <VoiceSelector
                   selectedVoice={selectedVoice}
@@ -71,8 +57,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   voices={voices}
                 />
               </div>
-            )}
-          </div>
+            </div>
+          )}
           
           {/* About Section */}
           <div className="settings-section">
@@ -95,8 +81,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </div>
           </div>
         </div>
-      </div>
-    </>
+    </SlidePanel>
   );
 };
 

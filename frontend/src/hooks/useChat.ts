@@ -1,12 +1,14 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Message, ChatRequest, ChatResponse, ChatState, ChatOptions, SendMessageOptions } from '../types/chat.types';
+import { ConversationTurn } from '../types/conversation.types';
 
 export const useChat = (options: ChatOptions = {}) => {
   const {
     backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000',
     onMessageSent,
     onMessageReceived,
-    onError
+    onError,
+    conversationId
   } = options;
 
   // State management
@@ -36,7 +38,7 @@ export const useChat = (options: ChatOptions = {}) => {
   }, [state.messages, scrollToBottom]);
 
   // Send message to backend
-  const sendMessageToBackend = useCallback(async (message: string): Promise<string> => {
+  const sendMessageToBackend = useCallback(async (message: string): Promise<{ ai: string; conversationId?: string }> => {
     try {
       // Prepare conversation history for the API
       const conversationHistory = state.messages.slice(1).map(msg => ({
@@ -46,14 +48,22 @@ export const useChat = (options: ChatOptions = {}) => {
 
       const requestBody: ChatRequest = {
         message: message,
-        conversation_history: conversationHistory
+        conversation_history: conversationHistory,
+        ...(
+          conversationId && conversationId !== 'new'
+            ? { conversation_id: conversationId }
+            : { start_new: true }
+        ),
       };
 
+      const accessToken = localStorage.getItem('access_token');
       const response = await fetch(`${backendUrl}/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
+        credentials: 'include',
         body: JSON.stringify(requestBody),
       });
 
@@ -62,16 +72,16 @@ export const useChat = (options: ChatOptions = {}) => {
       }
 
       const data: ChatResponse = await response.json();
-      return data.response;
+      return { ai: data.response, conversationId: data.conversation_id };
     } catch (error) {
       console.error('Error sending message to backend:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to get response from AI tutor. Please try again.';
       throw new Error(errorMessage);
     }
-  }, [state.messages, backendUrl]);
+  }, [state.messages, backendUrl, conversationId]);
 
   // Send a message
-  const sendMessage = useCallback(async (content: string, sender: 'user' | 'assistant' = 'user') => {
+  const sendMessage = useCallback(async (content: string, sender: 'user' | 'assistant' = 'user'): Promise<string | undefined> => {
     if (!content.trim()) return;
 
     const message: Message = {
@@ -95,7 +105,7 @@ export const useChat = (options: ChatOptions = {}) => {
       setState(prev => ({ ...prev, isLoading: true }));
 
       try {
-        const aiResponse = await sendMessageToBackend(message.content);
+        const { ai: aiResponse, conversationId: returnedConversationId } = await sendMessageToBackend(message.content);
         
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
@@ -111,6 +121,8 @@ export const useChat = (options: ChatOptions = {}) => {
         }));
 
         onMessageReceived?.(assistantMessage);
+
+        return returnedConversationId;
       } catch (error) {
         const errorMessage: Message = {
           id: (Date.now() + 1).toString(),
@@ -129,6 +141,7 @@ export const useChat = (options: ChatOptions = {}) => {
         onError?.(errorMessage.content);
       }
     }
+    return undefined;
   }, [sendMessageToBackend, onMessageSent, onMessageReceived, onError]);
 
   // Send message with options
@@ -183,6 +196,33 @@ export const useChat = (options: ChatOptions = {}) => {
     }));
   }, []);
 
+  // Hydrate messages from a list of conversation turns
+  const hydrateFromTurns = useCallback((turns: ConversationTurn[]) => {
+    const hydrated: Message[] = [
+      {
+        id: '1',
+        content: 'Hello! I\'m your AI tutor. How can I help you learn today?',
+        sender: 'assistant',
+        timestamp: new Date()
+      }
+    ];
+    for (const t of turns) {
+      hydrated.push({
+        id: `${t.id}-u`,
+        content: t.user_input,
+        sender: 'user',
+        timestamp: t.timestamp ? new Date(t.timestamp) : new Date()
+      });
+      hydrated.push({
+        id: `${t.id}-a`,
+        content: t.ai_response,
+        sender: 'assistant',
+        timestamp: t.timestamp ? new Date(t.timestamp) : new Date()
+      });
+    }
+    setState(prev => ({ ...prev, messages: hydrated, error: null }));
+  }, []);
+
   // Clear error
   const clearError = useCallback(() => {
     setState(prev => ({ ...prev, error: null }));
@@ -214,6 +254,7 @@ export const useChat = (options: ChatOptions = {}) => {
     updateMessage,
     deleteMessage,
     clearMessages,
+    hydrateFromTurns,
     clearError,
     
     // Utilities

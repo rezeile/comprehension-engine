@@ -7,19 +7,30 @@ import { useVoiceSynthesis } from '../hooks/useVoiceSynthesis';
 import { useVoiceMode } from '../hooks/useVoiceMode';
 import { useChat } from '../hooks/useChat';
 import { useAudioState } from '../hooks/useAudioState';
+import { ConversationService } from '../services/ConversationService';
+import { useNavigate } from 'react-router-dom';
 
 import ChatHeader from './ChatHeader';
+import HistoryDrawer from './HistoryDrawer/HistoryDrawer';
+import { useConversations } from '../hooks/useConversations';
 import ChatMessages from './ChatMessages';
 import ChatInput from './ChatInput';
 import VoiceMode from './VoiceMode';
 
-const ChatInterface: React.FC = () => {
+interface ChatInterfaceProps {
+  conversationId?: string;
+}
+
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
   // Use custom hooks for state management
+  const navigate = useNavigate();
   const { 
     messages, 
     isLoading, 
-    sendMessage 
-  } = useChat();
+    sendMessage,
+    hydrateFromTurns,
+    clearMessages
+  } = useChat({ conversationId });
   
   // Track when we're in the "sending message" state (user clicked send, waiting for AI)
   const [isSendingMessage, setIsSendingMessage] = useState(false);
@@ -167,6 +178,11 @@ const ChatInterface: React.FC = () => {
   
   // Initialize VoiceService
   const voiceService = useMemo(() => new VoiceService(), []);
+  const conversationService = useMemo(() => new ConversationService(), []);
+
+  // History drawer state
+  const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
+  const { conversations, isLoading: isHistoryLoading, hasMore, loadMore, renameConversation, refreshList } = useConversations();
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -335,7 +351,11 @@ const ChatInterface: React.FC = () => {
 
     // Use the sendMessage function from useChat hook
     try {
-      await sendMessage(messageToSend);
+      const returnedConversationId = await sendMessage(messageToSend);
+      // If backend returned a conversation id and route doesn't match, navigate
+      if (returnedConversationId && returnedConversationId !== conversationId) {
+        navigate(`/c/${returnedConversationId}`);
+      }
     } catch (error) {
       console.error('Error sending message:', error);
       // Reset sending state on error
@@ -343,11 +363,45 @@ const ChatInterface: React.FC = () => {
     }
   };
 
+  // Hydrate messages when conversationId changes
+  useEffect(() => {
+    let isCancelled = false;
+    const run = async () => {
+      try {
+        if (!conversationId || conversationId === 'new') {
+          // fresh state for new
+          clearMessages();
+          return;
+        }
+        const turns = await conversationService.listTurns(conversationId, 200, 0);
+        if (!isCancelled) {
+          hydrateFromTurns(turns);
+        }
+      } catch (e) {
+        console.error('Failed to hydrate conversation', e);
+      }
+    };
+    run();
+    return () => { isCancelled = true; };
+  }, [conversationId, conversationService, hydrateFromTurns, clearMessages]);
+
   return (
     <div className="chat-container">
       <ChatHeader
         onSettingsOpen={() => setIsSettingsOpen(true)}
         isSpeechRecognitionSupported={isSpeechRecognitionSupported}
+        onHistoryToggle={() => setIsHistoryOpen(v => !v)}
+      />
+      {/* History Modal */}
+      <HistoryDrawer
+        isOpen={isHistoryOpen}
+        conversations={conversations}
+        isLoading={isHistoryLoading}
+        onClose={() => setIsHistoryOpen(false)}
+        onLoadMore={loadMore}
+        hasMore={hasMore}
+        onSelect={(id) => { navigate(`/c/${id}`); }}
+        onRename={async (id, title) => { await renameConversation(id, title); await refreshList(); }}
       />
       
       {/* Voice Mode Interface */}

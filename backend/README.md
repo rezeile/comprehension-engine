@@ -54,6 +54,11 @@ python main.py
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
+### Development Mode with Auto-Reload
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
 ## 🚀 **Starting the Backend in Background**
 
 ### **Option 1: Using `nohup` (Recommended for Production)**
@@ -109,7 +114,12 @@ screen -S comprehension-engine
 # Inside the screen session:
 cd backend
 source venv/bin/activate
-python main.py
+
+# Development (auto-reload)
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+# Or (simple run)
+# python main.py
 
 # Detach from screen: Press Ctrl+A, then D
 # Reattach later: screen -r comprehension-engine

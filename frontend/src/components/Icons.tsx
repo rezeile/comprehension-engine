@@ -132,6 +132,27 @@ export const SettingsIcon: React.FC<IconProps> = ({
   </svg>
 );
 
+// History/Clock icon used in ChatHeader
+export const HistoryIcon: React.FC<IconProps> = ({
+  width = 20,
+  height = 20,
+  className = '',
+  stroke = 'currentColor',
+  fill = 'none'
+}) => (
+  <svg
+    width={width}
+    height={height}
+    viewBox="0 0 24 24"
+    fill={fill}
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <circle cx="12" cy="12" r="9" stroke={stroke} strokeWidth="2" />
+    <path d="M12 7V12L15 14" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 // Export all icons as a default object for convenience
 export const Icons = {
   Microphone: MicrophoneIcon,
@@ -140,6 +161,7 @@ export const Icons = {
   Close: CloseIcon,
   Send: SendIcon,
   Settings: SettingsIcon,
+  History: HistoryIcon,
 };
 
 export default Icons;

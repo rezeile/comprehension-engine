@@ -4,6 +4,22 @@ import { mixpanelService } from './services/MixpanelService';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import './App.css';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom';
+
+function ChatRouteWrapper() {
+  const params = useParams();
+  const conversationId = params.conversationId as string | undefined;
+  return <ChatInterface conversationId={conversationId} />;
+}
+
+function RedirectToLatestConversation() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    // Simply render ChatInterface without an id; the component will decide to create or navigate
+    navigate('/c/new', { replace: true });
+  }, [navigate]);
+  return null;
+}
 
 function App() {
   useEffect(() => {
@@ -27,9 +43,15 @@ function App() {
   return (
     <AuthProvider>
       <div className="App">
-        <ProtectedRoute>
-          <ChatInterface />
-        </ProtectedRoute>
+        <BrowserRouter>
+          <ProtectedRoute>
+            <Routes>
+              <Route path="/" element={<Navigate to="/c/new" replace />} />
+              <Route path="/c/new" element={<ChatRouteWrapper />} />
+              <Route path="/c/:conversationId" element={<ChatRouteWrapper />} />
+            </Routes>
+          </ProtectedRoute>
+        </BrowserRouter>
       </div>
     </AuthProvider>
   );

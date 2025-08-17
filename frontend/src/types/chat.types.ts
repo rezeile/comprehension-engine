@@ -13,6 +13,8 @@ export interface ChatRequest {
     role: 'user' | 'assistant';
     content: string;
   }>;
+  conversation_id?: string;
+  start_new?: boolean;
 }
 
 export interface ChatResponse {
@@ -31,6 +33,7 @@ export interface ChatOptions {
   onMessageSent?: (message: Message) => void;
   onMessageReceived?: (message: Message) => void;
   onError?: (error: string) => void;
+  conversationId?: string;
 }
 
 export interface SendMessageOptions {

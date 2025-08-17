@@ -5,3 +5,4 @@ export { useVoiceSynthesis } from './useVoiceSynthesis';
 export { useVoiceMode } from './useVoiceMode';
 export { useChat } from './useChat';
 export { useAudioState } from './useAudioState';
+export { useConversations } from './useConversations';

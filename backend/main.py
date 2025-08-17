@@ -4,12 +4,14 @@ from fastapi.responses import StreamingResponse
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
+from uuid import UUID
 import anthropic
 import os
 from dotenv import load_dotenv
 import io
 from sqlalchemy.orm import Session
 from time import perf_counter
+import re
 
 # Import our new prompt management system
 from prompts import prompt_manager
@@ -21,6 +23,7 @@ from database.connection import init_db
 
 # Import API routes
 from api.auth_routes import router as auth_router
+from auth.dependencies import get_current_user
 
 # ElevenLabs imports
 try:
@@ -60,7 +63,7 @@ app.add_middleware(
         "https://api.brightspring.ai",  # Production backend (for OAuth redirects)
     ],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Explicitly specify methods
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],  # Include PATCH for updates
     allow_headers=["*"],  # Allow all headers
     expose_headers=["*"],  # Expose all headers
     max_age=86400,  # Cache preflight requests for 24 hours
@@ -92,10 +95,48 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     conversation_history: Optional[List[dict]] = []
+    conversation_id: Optional[UUID] = None
+    start_new: Optional[bool] = False
 
 class ChatResponse(BaseModel):
     response: str
     conversation_id: Optional[str] = None
+
+
+# Conversation persistence schemas
+class ConversationSummary(BaseModel):
+    id: UUID
+    title: Optional[str] = None
+    topic: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    is_active: bool
+    last_turn_at: Optional[str] = None
+    turn_count: int
+
+    class Config:
+        from_attributes = True
+
+
+class ConversationTurnResponse(BaseModel):
+    id: UUID
+    turn_number: int
+    user_input: str
+    ai_response: str
+    timestamp: Optional[str] = None
+    comprehension_score: Optional[int] = None
+    comprehension_notes: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ConversationUpdate(BaseModel):
+    title: Optional[str] = None
+    is_active: Optional[bool] = None
+    topic: Optional[str] = None
+
+    # Keep config minimal to match existing pydantic usage style in this file
 
 # New TTS models
 class TTSRequest(BaseModel):
@@ -201,7 +242,7 @@ async def text_to_speech(request: TTSRequest):
         raise HTTPException(status_code=500, detail=f"TTS generation failed: {str(e)}")
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user: Optional[User] = Depends(lambda: None)):
+async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:
         start_time = perf_counter()
         # Prepare conversation history for Claude
@@ -237,18 +278,38 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user
         try:
             if current_user:
                 from database.models import Conversation, ConversationTurn
-                # Find or create an active conversation for this user (simple strategy)
-                conversation = (
-                    db.query(Conversation)
-                    .filter(Conversation.user_id == current_user.id, Conversation.is_active == True)
-                    .order_by(Conversation.created_at.desc())
-                    .first()
-                )
-                if not conversation:
+
+                conversation = None
+
+                # Determine conversation handling based on request
+                if request.start_new:
                     conversation = Conversation(user_id=current_user.id, title="New Conversation")
                     db.add(conversation)
                     db.commit()
                     db.refresh(conversation)
+                elif request.conversation_id:
+                    conversation = (
+                        db.query(Conversation)
+                        .filter(Conversation.id == request.conversation_id)
+                        .first()
+                    )
+                    if not conversation:
+                        raise HTTPException(status_code=404, detail="Conversation not found")
+                    if conversation.user_id != current_user.id:
+                        raise HTTPException(status_code=403, detail="Forbidden: conversation does not belong to user")
+                else:
+                    # Fallback to latest active conversation (simple strategy)
+                    conversation = (
+                        db.query(Conversation)
+                        .filter(Conversation.user_id == current_user.id, Conversation.is_active == True)
+                        .order_by(Conversation.created_at.desc())
+                        .first()
+                    )
+                    if not conversation:
+                        conversation = Conversation(user_id=current_user.id, title="New Conversation")
+                        db.add(conversation)
+                        db.commit()
+                        db.refresh(conversation)
 
                 # Determine next turn number
                 last_turn = (
@@ -271,7 +332,45 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user
                 )
                 db.add(turn)
                 db.commit()
+                db.refresh(turn)
                 conversation_id_str = str(conversation.id)
+
+                # Auto-title generation: after first turn if conversation has no title
+                try:
+                    if next_turn_number == 1 and (conversation.title is None or conversation.title.strip() == "" or conversation.title.strip().lower() == "new conversation"):
+                        def heuristic_title(text: str) -> Optional[str]:
+                            if not text:
+                                return None
+                            # Keep only letters/numbers/spaces
+                            cleaned = re.sub(r"[^A-Za-z0-9\s]", "", text)
+                            # Lowercase and split
+                            tokens = cleaned.lower().split()
+                            if not tokens:
+                                return None
+                            stopwords = {
+                                "the","a","an","and","or","but","if","then","else","when","at","by","for","with","about","against","between","into","through","during","before","after","above","below","to","from","up","down","in","out","on","off","over","under","again","further","than","once","here","there","why","how","what","which","who","whom","is","are","was","were","be","been","being","do","does","did","doing","have","has","had","having","of","it","this","that","these","those","i","you","he","she","they","we","me","him","her","them","my","your","his","their","our","yours","theirs","ours","as"
+                            }
+                            # Keep first 3 non-stopwords; if none, fallback to first 3 tokens
+                            significant = [t for t in tokens if t not in stopwords]
+                            selected = (significant or tokens)[:3]
+                            title = " ".join(selected).strip()
+                            if not title:
+                                return None
+                            # Title case words
+                            title = " ".join(w.capitalize() for w in title.split())
+                            return title
+
+                        candidate = heuristic_title(request.message) or heuristic_title(ai_response)
+                        if candidate and len(candidate.split()) <= 3:
+                            # Persist the title
+                            conversation.title = candidate
+                            db.add(conversation)
+                            db.commit()
+                except Exception as title_error:
+                    # Do not fail chat on title issues
+                    print(f"Auto-title generation failed: {title_error}")
+        except HTTPException:
+            raise
         except Exception as persist_error:
             # Do not fail the chat on persistence issues
             print(f"Warning: failed to persist conversation turn: {persist_error}")
@@ -287,6 +386,151 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user
     except Exception as e:
         print(f"Internal server error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@app.get("/api/conversations", response_model=List[ConversationSummary])
+async def list_conversations(limit: int = 20, offset: int = 0, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    try:
+        from database.models import Conversation, ConversationTurn
+
+        conversations = (
+            db.query(Conversation)
+            .filter(Conversation.user_id == current_user.id)
+            .order_by(Conversation.updated_at.desc(), Conversation.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+            .all()
+        )
+
+        # Compute last_turn_at and turn_count for each conversation
+        summaries: List[ConversationSummary] = []
+        for c in conversations:
+            last_turn = (
+                db.query(ConversationTurn)
+                .filter(ConversationTurn.conversation_id == c.id)
+                .order_by(ConversationTurn.timestamp.desc())
+                .first()
+            )
+            turn_count = (
+                db.query(ConversationTurn)
+                .filter(ConversationTurn.conversation_id == c.id)
+                .count()
+            )
+            summaries.append(ConversationSummary(
+                id=c.id,
+                title=c.title,
+                topic=c.topic,
+                created_at=c.created_at.isoformat() if c.created_at else None,
+                updated_at=c.updated_at.isoformat() if c.updated_at else None,
+                is_active=c.is_active,
+                last_turn_at=last_turn.timestamp.isoformat() if last_turn and last_turn.timestamp else None,
+                turn_count=turn_count
+            ))
+        return summaries
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Failed to list conversations: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list conversations")
+
+
+@app.patch("/api/conversations/{conversation_id}", response_model=ConversationSummary)
+async def update_conversation(conversation_id: UUID, payload: ConversationUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    try:
+        from database.models import Conversation, ConversationTurn
+
+        conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        if conversation.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Forbidden: conversation does not belong to user")
+
+        updated = False
+        if payload.title is not None:
+            # Normalize: enforce <= 3 words and strip punctuation
+            cleaned = re.sub(r"[^A-Za-z0-9\s]", "", payload.title or "").strip()
+            words = cleaned.split()
+            cleaned = " ".join(words[:3])
+            conversation.title = cleaned if cleaned else None
+            updated = True
+        if payload.is_active is not None:
+            conversation.is_active = bool(payload.is_active)
+            updated = True
+        if payload.topic is not None:
+            conversation.topic = payload.topic.strip() if payload.topic else None
+            updated = True
+
+        if updated:
+            db.add(conversation)
+            db.commit()
+
+        # Build summary
+        last_turn = (
+            db.query(ConversationTurn)
+            .filter(ConversationTurn.conversation_id == conversation.id)
+            .order_by(ConversationTurn.timestamp.desc())
+            .first()
+        )
+        turn_count = (
+            db.query(ConversationTurn)
+            .filter(ConversationTurn.conversation_id == conversation.id)
+            .count()
+        )
+
+        return ConversationSummary(
+            id=conversation.id,
+            title=conversation.title,
+            topic=conversation.topic,
+            created_at=conversation.created_at.isoformat() if conversation.created_at else None,
+            updated_at=conversation.updated_at.isoformat() if conversation.updated_at else None,
+            is_active=conversation.is_active,
+            last_turn_at=last_turn.timestamp.isoformat() if last_turn and last_turn.timestamp else None,
+            turn_count=turn_count
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Failed to update conversation: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update conversation")
+
+
+@app.get("/api/conversations/{conversation_id}/turns", response_model=List[ConversationTurnResponse])
+async def list_conversation_turns(conversation_id: UUID, limit: int = 50, offset: int = 0, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    try:
+        from database.models import Conversation, ConversationTurn
+
+        conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        if conversation.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Forbidden: conversation does not belong to user")
+
+        turns = (
+            db.query(ConversationTurn)
+            .filter(ConversationTurn.conversation_id == conversation_id)
+            .order_by(ConversationTurn.turn_number.asc())
+            .limit(limit)
+            .offset(offset)
+            .all()
+        )
+
+        return [
+            ConversationTurnResponse(
+                id=t.id,
+                turn_number=t.turn_number,
+                user_input=t.user_input,
+                ai_response=t.ai_response,
+                timestamp=t.timestamp.isoformat() if t.timestamp else None,
+                comprehension_score=t.comprehension_score,
+                comprehension_notes=t.comprehension_notes
+            )
+            for t in turns
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Failed to list conversation turns: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list conversation turns")
 
 @app.get("/api/cors-test")
 async def cors_test():
