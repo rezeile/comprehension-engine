@@ -46,3 +46,13 @@ class GoogleUserInfo(BaseModel):
     name: str
     picture: Optional[str] = None
     email_verified: bool = True
+
+class MobileGoogleExchangeRequest(BaseModel):
+    """Request payload for exchanging a Google access token on mobile for app JWTs"""
+    access_token: str
+
+class MobileAppleExchangeRequest(BaseModel):
+    """Request payload for exchanging an Apple identity token on mobile for app JWTs (phase 2)"""
+    identity_token: str
+    full_name: Optional[str] = None
+    email: Optional[EmailStr] = None

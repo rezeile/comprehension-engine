@@ -50,6 +50,8 @@
   flex-direction: column;
   align-items: center;
   gap: 1rem;
+  /* Ensure consistent overall footprint */
+  min-height: 88px; /* ring 38px + text + gap; keeps size stable */
 }
 
 .voice-mode-indicator {
@@ -106,7 +108,7 @@
 }
 
 .transcription-display {
-  background: var(--user-chip-bg);
+  background: var(--surface);
   border-radius: 16px;
   padding: 1rem 1.25rem;
   border: 1px solid var(--user-chip-border, var(--border-subtle));
@@ -126,6 +128,7 @@
   min-height: 40px;
   display: flex;
   align-items: center;
+  background: var(--surface);
 }
 
 .transcription-textarea:empty::before {
@@ -202,15 +205,17 @@
   transform: none;
 }
 
-.voice-control-btn.cancel-btn {
-  background: #e53e3e; /* darker danger */
-  border-color: #c53030;
-  color: #fff;
+/* Close button matches slide panel close styling */
+.voice-control-btn.close-btn {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--border-subtle);
+  color: #9aa0a6;
 }
 
-.voice-control-btn.cancel-btn:hover {
-  background: #c53030;
-  border-color: #9b2c2c;
+.voice-control-btn.close-btn:hover {
+  background: var(--inline-code-bg);
+  border-color: var(--border-subtle);
+  transform: none;
 }
 
 .voice-control-btn.send-btn {
@@ -220,7 +225,13 @@
 }
 
 .voice-control-btn.send-btn:hover:not(:disabled) {
-  filter: brightness(0.9);
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.voice-control-btn.send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Mobile Responsiveness */
@@ -335,26 +346,7 @@
   20% { transform: scaleY(1); }
 }
 
-/* Single-wave visual for user speaking */
-.mic-single-wave {
-  height: 28px;
-  display: flex;
-  align-items: flex-end;
-}
-
-.mic-single-wave span {
-  width: 44px;
-  height: 100%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 4px;
-  transform-origin: center bottom;
-  animation: singleWave 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
-}
-
-@keyframes singleWave {
-  0%, 40%, 100% { transform: scaleY(0.45); }
-  20% { transform: scaleY(1); }
-}
+/* Remove mic-single-wave in favor of consistent ring UI */
 
 /* AI speaking: pulsing ring */
 .mic-ring {
@@ -379,6 +371,15 @@
 
 .mic-ring--ai::after {
   border-color: rgba(103, 92, 233, 0.35);
+}
+
+.mic-ring--user {
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+  opacity: 0.8; /* reduced by 20% */
+}
+
+.mic-ring--user::after {
+  border-color: rgba(248, 113, 113, 0.35);
 }
 
 .mic-ring--neutral {

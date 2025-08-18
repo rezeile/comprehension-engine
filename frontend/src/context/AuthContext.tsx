@@ -62,10 +62,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           }
         }
 
-        // Call backend with credentials included so cookies are sent
-        const response = await fetch(`${API_BASE}/api/auth/me`, {
-          credentials: 'include',
-        });
+        // Call backend with credentials included so cookies are sent.
+        // Add a timeout so the UI doesn't hang indefinitely if backend is slow/unreachable.
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), 8000);
+        let response: Response;
+        try {
+          response = await fetch(`${API_BASE}/api/auth/me`, {
+            credentials: 'include',
+            signal: controller.signal,
+          });
+        } finally {
+          window.clearTimeout(timeoutId);
+        }
 
         if (response.ok) {
           const userData = await response.json();

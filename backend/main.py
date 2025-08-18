@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from starlette.middleware.sessions import SessionMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from uuid import UUID
@@ -38,6 +39,9 @@ except ImportError:
 load_dotenv()
 
 app = FastAPI(title="Comprehension Engine API", version="1.0.0")
+
+# Respect X-Forwarded-* headers when running behind proxies (Railway, Vercel, etc.)
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 
 # Initialize database on startup
 @app.on_event("startup")

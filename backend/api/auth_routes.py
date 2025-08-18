@@ -23,7 +23,13 @@ from auth import (
     get_current_active_user
 )
 from auth.oauth import get_google_user_info
-from auth.schemas import TokenResponse, UserResponse, GoogleUserInfo
+from auth.schemas import (
+    TokenResponse,
+    UserResponse,
+    GoogleUserInfo,
+    MobileGoogleExchangeRequest,
+    MobileAppleExchangeRequest,
+)
 from auth.jwt_handler import ACCESS_TOKEN_EXPIRE_MINUTES
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
@@ -42,10 +48,15 @@ async def login(request: Request):
         )
     
     # Construct proper redirect URI
-    base_url = str(request.base_url).rstrip('/')
-    # Ensure we have a proper domain for OAuth
-    if base_url == "http://" or base_url == "https://":
-        base_url = "http://localhost:8000"  # Fallback for local development
+    # Prefer explicit public URL when running behind proxies (Railway, etc.)
+    public_base = os.getenv("BACKEND_PUBLIC_URL", "").rstrip("/")
+    if public_base:
+        base_url = public_base
+    else:
+        base_url = str(request.base_url).rstrip('/')
+        # Ensure we have a proper domain for OAuth
+        if base_url == "http://" or base_url == "https://":
+            base_url = "http://localhost:8000"  # Fallback for local development
     
     redirect_uri = f"{base_url}/api/auth/callback"
     
@@ -292,3 +303,39 @@ async def dev_login(email: str, name: Optional[str] = None, db: Session = Depend
         token_type="bearer",
         expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60
     )
+
+# ---- Mobile token exchange endpoints ----
+
+@router.post("/mobile/google", response_model=TokenResponse)
+async def mobile_google_exchange(payload: MobileGoogleExchangeRequest, db: Session = Depends(get_db)):
+    """
+    Exchange a Google access token (obtained natively on iOS/Android) for app JWTs.
+
+    This avoids cookie/redirect flows and keeps mobile sessions independent of web.
+    """
+    # Validate with Google and get profile
+    google_user: Optional[GoogleUserInfo] = await get_google_user_info(payload.access_token)
+    if not google_user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Google access token")
+
+    # Upsert user
+    user = create_user_from_google(db, google_user)
+
+    # Issue tokens
+    access_token = create_access_token(data={"sub": str(user.id), "email": user.email})
+    refresh_token = create_refresh_token(data={"sub": str(user.id), "email": user.email})
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_type="bearer",
+        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
+
+@router.post("/mobile/apple", response_model=TokenResponse)
+async def mobile_apple_exchange(_: MobileAppleExchangeRequest):
+    """
+    Placeholder for Apple Sign In token exchange.
+    Implement verification against Apple JWKs and user linking in a follow-up.
+    """
+    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Apple mobile exchange not implemented yet")

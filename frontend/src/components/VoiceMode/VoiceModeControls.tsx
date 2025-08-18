@@ -18,7 +18,7 @@ const VoiceModeControls: React.FC<VoiceModeControlsProps> = ({
     <div className="voice-controls">
       <button
         onClick={onExit}
-        className="voice-control-btn cancel-btn"
+        className="voice-control-btn close-btn"
         title="Exit voice mode"
       >
         <CloseIcon width={24} height={24} />

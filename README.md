@@ -175,13 +175,63 @@ tmux attach-session -t frontend
 ```bash
 # Backend
 cd backend
-uvicorn main:app --host 0.0.0.0 --port 8000
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# How to find Mac's IP Address (needed for Info.plist for ios)
+ipconfig getifaddr $(route -n get default | awk '/interface:/{print $2}') | cat
 
 # Frontend
 cd frontend
 npm run build
 # Serve the build folder with a static server
 ```
+
+### Temporary HTTPS Tunnel for iOS Device Testing
+
+If a physical iOS device cannot reach `http://<your-mac-ip>:8000` due to firewall/network rules, expose your local backend over HTTPS using a temporary tunnel.
+
+Cloudflare Tunnel (no account required):
+```bash
+brew install cloudflared
+cloudflared tunnel --url http://localhost:8000
+```
+This prints a URL like `https://<random>.trycloudflare.com`. Use it as `BACKEND_BASE_URL` in `ComprehensionEngine/Info.plist`.
+
+Test:
+```bash
+curl -s https://<random>.trycloudflare.com/health
+```
+
+Stop the tunnel:
+```bash
+pkill -f 'cloudflared tunnel --url http://localhost:8000'
+```
+
+Optional (run in background and capture the URL):
+```bash
+cloudflared tunnel --url http://localhost:8000 --logfile /tmp/cloudflared.log --loglevel info &
+sleep 2; grep -Eo 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/cloudflared.log | tail -n 1
+```
+
+Oneliner to restart and print new url 
+```bash 
+pkill -f 'cloudflared tunnel --url http://localhost:8000' || true
+cloudflared tunnel --url http://localhost:8000 --logfile /tmp/cloudflared.log --loglevel info &
+sleep 2; grep -Eo 'https://[-a-z0-9]+\\.trycloudflare\\.com' /tmp/cloudflared.log | tail -n 1
+```
+
+keep mac awake while tunneling: 
+
+```bash 
+caffeinate -dimsu cloudflared tunnel --url http://localhost:8000
+```
+
+Alternative (ngrok):
+```bash
+brew install ngrok
+ngrok http 8000
+```
+Use the printed `https://<id>.ngrok.io` as `BACKEND_BASE_URL`.
 
 ## 🔧 **Managing Background Services**
 

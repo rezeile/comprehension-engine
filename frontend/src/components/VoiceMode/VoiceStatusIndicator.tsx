@@ -24,11 +24,16 @@ const VoiceStatusIndicator: React.FC<VoiceStatusIndicatorProps> = ({
             <div className="mic-ring mic-ring--ai" aria-hidden />
             <p>Antoni is speaking...</p>
           </>
+        ) : isRecording ? (
+          <>
+            <div className="mic-ring mic-ring--user" aria-hidden />
+            <p>Listening...</p>
+          </>
         ) : (
-          // Listening (user speaking): single bar waveform
-          <div className="mic-single-wave" aria-hidden>
-            <span></span>
-          </div>
+          <>
+            <div className="mic-ring mic-ring--neutral" aria-hidden />
+            <p>Ready</p>
+          </>
         )}
       </div>
     </div>
