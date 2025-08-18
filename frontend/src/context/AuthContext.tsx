@@ -63,6 +63,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           }
         }
 
+        // If we have no auth cookies and no stored tokens, skip hitting the backend and show login immediately
+        const hasCookie = document.cookie.includes('ce_access_token=') || document.cookie.includes('ce_refresh_token=');
+        const hasLocalTokens = !!localStorage.getItem('access_token') || !!localStorage.getItem('refresh_token');
+        if (!hasCookie && !hasLocalTokens && url.pathname !== '/auth/callback') {
+          setIsLoading(false);
+          return;
+        }
+
         // Call backend with credentials included so cookies are sent.
         // Add a timeout so the UI doesn't hang indefinitely if backend is slow/unreachable.
         const controller = new AbortController();
@@ -85,10 +93,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
         }
-      } catch (error) {
-        console.error('Auth bootstrap failed:', error);
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
+      } catch (error: any) {
+        // Suppress expected abort noise; only log real failures
+        const isAbort = error && (error.name === 'AbortError' || error?.code === 20);
+        if (!isAbort) {
+          console.error('Auth bootstrap failed:', error);
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+        }
       } finally {
         setIsLoading(false);
       }
