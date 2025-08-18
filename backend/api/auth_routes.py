@@ -78,9 +78,19 @@ async def auth_callback(request: Request, db: Session = Depends(get_db)):
     try:
         print(f"Starting OAuth callback...")
         
-        # Get access token from Google
+        # Compute the same redirect_uri used during login
+        public_base = os.getenv("BACKEND_PUBLIC_URL", "").rstrip("/")
+        if public_base:
+            base_url = public_base
+        else:
+            base_url = str(request.base_url).rstrip('/')
+            if base_url == "http://" or base_url == "https://":
+                base_url = "http://localhost:8000"
+        redirect_uri = f"{base_url}/api/auth/callback"
+
+        # Get access token from Google (explicitly pass redirect_uri to avoid mismatch behind proxies)
         print(f"Getting access token...")
-        token = await google_oauth.authorize_access_token(request)
+        token = await google_oauth.authorize_access_token(request, redirect_uri=redirect_uri)
         print(f"Got token: {token.keys() if token else 'None'}")
         
         # Get user info from Google using the access token
