@@ -54,7 +54,7 @@ const Login: React.FC = () => {
       <main className="landing-main" aria-labelledby="landing-title">
         <div className="content-stack">
           <h1 id="landing-title" className="landing-title">Understand Faster. Remember Longer.</h1>
-          <p className="landing-sub">A tutor that adapts as you think.</p>
+          <p className="landing-sub">AI tutor that adapts as you think.</p>
           <button
             ref={ctaRef}
             type="button"
