@@ -34,6 +34,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const API_BASE = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+  const BOOTSTRAP_TIMEOUT_MS = Number(process.env.REACT_APP_AUTH_BOOTSTRAP_TIMEOUT_MS || '2000');
 
   // One-shot bootstrap: capture tokens from callback if present, save them, then fetch /me.
   useEffect(() => {
@@ -65,7 +66,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Call backend with credentials included so cookies are sent.
         // Add a timeout so the UI doesn't hang indefinitely if backend is slow/unreachable.
         const controller = new AbortController();
-        const timeoutId = window.setTimeout(() => controller.abort(), 8000);
+        const timeoutId = window.setTimeout(() => controller.abort(), BOOTSTRAP_TIMEOUT_MS);
         let response: Response;
         try {
           response = await fetch(`${API_BASE}/api/auth/me`, {
