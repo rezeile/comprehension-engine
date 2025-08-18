@@ -1,0 +1,46 @@
+.marketing-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 16px 22px;
+  pointer-events: none;
+}
+
+.marketing-header__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.brand__logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(255, 255, 255, 0.35);
+}
+
+.brand__wordmark {
+  font-weight: 500;
+  font-size: clamp(16px, 2.4vw, 30px);
+  letter-spacing: 0.2px;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.25);
+  vertical-align: bottom;
+}
+
+@media (prefers-color-scheme: light) {
+  .brand__wordmark {
+    color: rgba(255, 255, 255, 0.95);
+  }
+}
+
+

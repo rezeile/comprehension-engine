@@ -1,36 +1,49 @@
-.login-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+.landing-root {
   min-height: 100vh;
-  background: var(--bg-app);
-  padding: 20px;
+  position: relative;
+  background: linear-gradient(135deg, #7C3AED, #EC4899 40%, #22D3EE 75%, #F59E0B 100%);
+}
+
+.landing-main {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
   position: relative;
 }
 
-/* Optional soft academic gradient motif */
-.login-container::before {
-  content: '';
+.content-stack {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  max-width: 720px;
+  color: white;
+}
+
+.bg-brand {
   position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: radial-gradient(1200px 600px at 10% -20%, rgba(103, 92, 233, 0.06), transparent 50%),
-              radial-gradient(900px 500px at 120% 0%, rgba(118, 75, 162, 0.06), transparent 50%);
+  width: min(600px, 48vw);
+  height: auto;
+  opacity: 0.12;
+  right: 6vw;
+  bottom: 8vh;
+  filter: drop-shadow(0 24px 40px rgba(0,0,0,0.25));
 }
 
-/* Background motif variants */
-.login-container.motif-minimal::before {
-  background: radial-gradient(900px 520px at 0% -10%, rgba(103,92,233,0.05), transparent 40%);
+.landing-title {
+  margin: 0 0 12px 0;
+  font-size: clamp(43.2px, 8.4vw, 72px);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  text-shadow: 0 6px 24px rgba(0,0,0,0.25);
 }
 
-.login-container.motif-animated::before {
-  animation: hueShift 18s linear infinite;
-}
-
-@keyframes hueShift {
-  0% { filter: hue-rotate(0deg) saturate(100%); }
-  50% { filter: hue-rotate(12deg) saturate(110%); }
-  100% { filter: hue-rotate(0deg) saturate(100%); }
+.landing-sub {
+  margin: 0 auto 28px auto;
+  font-size: clamp(22px, 3.575vw, 27.5px);
+  line-height: 1.6;
+  opacity: 0.95;
+  text-shadow: 0 4px 16px rgba(0,0,0,0.25);
 }
 
 .login-card {
@@ -57,12 +70,7 @@
   box-shadow: 0 6px 18px rgba(103, 92, 233, 0.25);
 }
 
-.login-header h1 {
-  color: var(--text-primary);
-  margin: 0;
-  font-size: 48px;
-  font-weight: 800;
-}
+.login-header h1 { color: var(--text-primary); margin: 0; font-size: 48px; font-weight: 800; }
 
 .hero-title {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -98,16 +106,18 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  background: var(--surface);
-  color: var(--text-primary);
-  border: 1px solid var(--border-subtle);
+  background: rgba(255,255,255,0.92);
+  color: #111827;
+  border: 1px solid rgba(255,255,255,0.75);
   border-radius: 12px;
   padding: 12px 16px;
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
   width: 100%;
+  /* Subtle border shadow */
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.06), 0 8px 24px rgba(17, 24, 39, 0.08);
 }
 
 .btn-xl {
@@ -116,10 +126,30 @@
 }
 
 .google-login-btn:hover {
-  border-color: var(--brand-accent);
-  background: var(--inline-code-bg);
+  border-color: rgba(255,255,255,0.9);
+  background: #fff;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 6px rgba(17, 24, 39, 0.12), 0 12px 32px rgba(17, 24, 39, 0.12);
+}
+
+/* Sleek tap visual feedback */
+.google-login-btn:active,
+.google-login-btn.is-pressed {
+  transform: translateY(0) scale(0.985);
+  box-shadow:
+    0 0 0 2px rgba(34, 211, 238, 0.18), /* soft focus ring */
+    inset 0 1px 2px rgba(17, 24, 39, 0.18),
+    0 6px 20px rgba(17, 24, 39, 0.12);
+}
+
+.landing-cta {
+  max-width: 360px;
+  margin: 0 auto;
+  outline: none;
+}
+
+.landing-cta:focus-visible {
+  box-shadow: 0 0 0 4px rgba(255,255,255,0.6), 0 0 0 6px rgba(34, 211, 238, 0.9);
 }
 
 .login-subcopy {
@@ -206,17 +236,5 @@
 
 /* Responsive design */
 @media (max-width: 480px) {
-  .login-card {
-    padding: 24px;
-    margin: 20px;
-    max-width: 280px;
-  }
-  
-  .login-header h1 {
-    font-size: 22px;
-  }
-  
-  .login-header p {
-    font-size: 13px;
-  }
+  .bg-brand { width: 62vw; right: 4vw; bottom: 10vh; }
 }

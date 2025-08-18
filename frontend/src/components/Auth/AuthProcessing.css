@@ -1,0 +1,46 @@
+.processing-root {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg-app);
+  overflow: hidden;
+}
+
+/* Minimal neutral loader matching app theme */
+.processing-loader {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 3px solid var(--border-subtle);
+  /* Match loader color to text; avoid dark gray */
+  color: color-mix(in srgb, var(--text-secondary) 75%, var(--text-primary) 25%);
+  border-top-color: currentColor;
+  animation: spin 2s linear infinite;
+}
+
+/* Centered spinning logo */
+.processing-text {
+  position: absolute;
+  bottom: 12vh;
+  /* ~25% darker than secondary for better contrast */
+  color: color-mix(in srgb, var(--text-secondary) 75%, white 25%);
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+.processing-text {
+  position: absolute;
+  bottom: 12vh;
+  color: rgba(255,255,255,0.115);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .facet-a, .facet-b, .facet-c, .facet-d { animation: none; }
+}
+
+

@@ -128,8 +128,8 @@ async def auth_callback(request: Request, db: Session = Depends(get_db)):
         # Use configured FRONTEND_URL to avoid state mismatches
         frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
         
-        # Set httpOnly cookies and redirect to frontend root
-        response = RedirectResponse(url=f"{frontend_url}/")
+        # Set httpOnly cookies and redirect to frontend processing page to avoid login flicker
+        response = RedirectResponse(url=f"{frontend_url}/auth/processing")
         # Cross-site cookies for prod; same-site for dev
         is_local = frontend_url.startswith("http://localhost") or frontend_url.startswith("http://127.0.0.1")
         if is_local:

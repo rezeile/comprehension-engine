@@ -1,5 +1,7 @@
 import React, { useEffect } from 'react';
 import ChatInterface from './components/ChatInterface';
+import AuthProcessing from './components/Auth/AuthProcessing';
+import Login from './components/Auth/Login';
 import { mixpanelService } from './services/MixpanelService';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
@@ -44,13 +46,22 @@ function App() {
     <AuthProvider>
       <div className="App">
         <BrowserRouter>
-          <ProtectedRoute>
-            <Routes>
-              <Route path="/" element={<Navigate to="/c/new" replace />} />
-              <Route path="/c/new" element={<ChatRouteWrapper />} />
-              <Route path="/c/:conversationId" element={<ChatRouteWrapper />} />
-            </Routes>
-          </ProtectedRoute>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/auth/processing" element={<AuthProcessing />} />
+            <Route
+              path="/*"
+              element={
+                <ProtectedRoute>
+                  <Routes>
+                    <Route path="/" element={<Navigate to="/c/new" replace />} />
+                    <Route path="/c/new" element={<ChatRouteWrapper />} />
+                    <Route path="/c/:conversationId" element={<ChatRouteWrapper />} />
+                  </Routes>
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
         </BrowserRouter>
       </div>
     </AuthProvider>

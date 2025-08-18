@@ -28,6 +28,9 @@
   --user-chip-border: rgba(103, 92, 233, 0.18); /* subtle brand-tinted outline */
   --link: var(--brand-accent-strong);
   --inline-code-bg: #F1F3F8;
+  /* Marketing gradient tokens */
+  --marketing-gradient: linear-gradient(135deg, #7C3AED, #EC4899 40%, #22D3EE 75%, #F59E0B 100%);
+  --marketing-glow: 0 30px 80px rgba(124, 58, 237, 0.25), 0 40px 120px rgba(236, 72, 153, 0.2);
 }
 
 /* Dark mode tokens (deferred activation) */
