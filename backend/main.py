@@ -285,27 +285,44 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user
         # to avoid large payloads from the frontend on every turn.
         MAX_TURNS = 10
         if request.conversation_id and not request.start_new:
-            # Verify the conversation belongs to the current user
-            convo = (
-                db.query(Conversation)
-                .filter(Conversation.id == request.conversation_id)
-                .first()
-            )
-            if not convo:
-                raise HTTPException(status_code=404, detail="Conversation not found")
-            if convo.user_id != current_user.id:
-                raise HTTPException(status_code=403, detail="Forbidden: conversation does not belong to user")
-
-            last_turns = (
-                db.query(ConversationTurn)
-                .filter(ConversationTurn.conversation_id == convo.id)
-                .order_by(ConversationTurn.turn_number.desc())
-                .limit(MAX_TURNS)
-                .all()
-            )
-            for t in reversed(last_turns):
-                messages.append({"role": "user", "content": t.user_input})
-                messages.append({"role": "assistant", "content": t.ai_response})
+            try:
+                # Verify the conversation belongs to the current user
+                convo = (
+                    db.query(Conversation)
+                    .filter(Conversation.id == request.conversation_id)
+                    .first()
+                )
+                if convo and convo.user_id == current_user.id:
+                    last_turns = (
+                        db.query(ConversationTurn)
+                        .filter(ConversationTurn.conversation_id == convo.id)
+                        .order_by(ConversationTurn.turn_number.desc())
+                        .limit(MAX_TURNS)
+                        .all()
+                    )
+                    for t in reversed(last_turns):
+                        messages.append({"role": "user", "content": t.user_input})
+                        messages.append({"role": "assistant", "content": t.ai_response})
+                else:
+                    # Ownership mismatch or missing conversation: fall back gracefully
+                    if request.conversation_history:
+                        for msg in request.conversation_history:
+                            if msg.get("role") == "user":
+                                messages.append({"role": "user", "content": msg["content"]})
+                            elif msg.get("role") == "assistant":
+                                messages.append({"role": "assistant", "content": msg["content"]})
+            except Exception as e:
+                # Do not fail chat if DB is unavailable; log and fall back to client-provided history
+                try:
+                    print(f"[CE] History rebuild skipped due to error: {e}")
+                except Exception:
+                    pass
+                if request.conversation_history:
+                    for msg in request.conversation_history:
+                        if msg.get("role") == "user":
+                            messages.append({"role": "user", "content": msg["content"]})
+                        elif msg.get("role") == "assistant":
+                            messages.append({"role": "assistant", "content": msg["content"]})
         else:
             # Fallback to any provided conversation_history from the client
             if request.conversation_history:
