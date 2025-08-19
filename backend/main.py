@@ -2,9 +2,15 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from starlette.middleware.sessions import SessionMiddleware
-from starlette.middleware.proxy_headers import ProxyHeadersMiddleware
+try:
+    from starlette.middleware.proxy_headers import ProxyHeadersMiddleware  # Starlette <0.48
+except Exception:
+    try:
+        from starlette.middleware.proxyheaders import ProxyHeadersMiddleware  # Alternate location in some versions
+    except Exception:
+        ProxyHeadersMiddleware = None  # Optional; skip if unavailable
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Literal
 from uuid import UUID
 import anthropic
 import os
@@ -24,6 +30,7 @@ from database.connection import init_db
 
 # Import API routes
 from api.auth_routes import router as auth_router
+from api.knowledge_routes import router as knowledge_router
 from auth.dependencies import get_current_user
 
 # ElevenLabs imports
@@ -41,7 +48,10 @@ load_dotenv()
 app = FastAPI(title="Comprehension Engine API", version="1.0.0")
 
 # Respect X-Forwarded-* headers when running behind proxies (Railway, Vercel, etc.)
-app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
+if ProxyHeadersMiddleware is not None:
+    app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
+else:
+    print("Warning: ProxyHeadersMiddleware unavailable; proceeding without it.")
 
 # Initialize database on startup
 @app.on_event("startup")
@@ -73,8 +83,9 @@ app.add_middleware(
     max_age=86400,  # Cache preflight requests for 24 hours
 )
 
-# Include authentication routes
+# Include routes
 app.include_router(auth_router)
+app.include_router(knowledge_router)
 
 # Initialize Anthropic client
 api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -101,6 +112,8 @@ class ChatRequest(BaseModel):
     conversation_history: Optional[List[dict]] = []
     conversation_id: Optional[UUID] = None
     start_new: Optional[bool] = False
+    # New: mode awareness for prompt composition
+    mode: Optional[Literal["text", "voice"]] = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -228,11 +241,27 @@ async def text_to_speech(request: TTSRequest):
             raise HTTPException(status_code=400, detail="Invalid voice ID")
         
         # Generate speech with ElevenLabs
-        audio = generate(
-            text=request.text,
-            voice=request.voice_id,
-            model="eleven_multilingual_v2"
-        )
+        # Low-risk latency reduction: prefer lower-bitrate output and latency optimization if supported
+        output_format = os.getenv("ELEVENLABS_OUTPUT_FORMAT", "mp3_22050_64")
+        optimize_latency = os.getenv("ELEVENLABS_OPTIMIZE_STREAMING_LATENCY", "4")
+
+        base_kwargs = {
+            "text": request.text,
+            "voice": request.voice_id,
+            "model": "eleven_multilingual_v2",
+        }
+
+        audio = None
+        try:
+            # Newer SDKs accept both parameters
+            audio = generate(**base_kwargs, output_format=output_format, optimize_streaming_latency=optimize_latency)
+        except TypeError:
+            try:
+                # Fallback: some SDKs only accept output_format
+                audio = generate(**base_kwargs, output_format=output_format)
+            except TypeError:
+                # Final fallback: default behavior
+                audio = generate(**base_kwargs)
         
         # Return audio as streaming response
         return StreamingResponse(
@@ -251,25 +280,77 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user
         start_time = perf_counter()
         # Prepare conversation history for Claude
         messages = []
-        
-        # Add conversation history if provided
-        if request.conversation_history:
-            for msg in request.conversation_history:
-                if msg.get("role") == "user":
-                    messages.append({"role": "user", "content": msg["content"]})
-                elif msg.get("role") == "assistant":
-                    messages.append({"role": "assistant", "content": msg["content"]})
-        
+
+        # Low-risk latency reduction: when conversation_id exists, rebuild last K turns on backend
+        # to avoid large payloads from the frontend on every turn.
+        MAX_TURNS = 10
+        if request.conversation_id and not request.start_new:
+            # Verify the conversation belongs to the current user
+            convo = (
+                db.query(Conversation)
+                .filter(Conversation.id == request.conversation_id)
+                .first()
+            )
+            if not convo:
+                raise HTTPException(status_code=404, detail="Conversation not found")
+            if convo.user_id != current_user.id:
+                raise HTTPException(status_code=403, detail="Forbidden: conversation does not belong to user")
+
+            last_turns = (
+                db.query(ConversationTurn)
+                .filter(ConversationTurn.conversation_id == convo.id)
+                .order_by(ConversationTurn.turn_number.desc())
+                .limit(MAX_TURNS)
+                .all()
+            )
+            for t in reversed(last_turns):
+                messages.append({"role": "user", "content": t.user_input})
+                messages.append({"role": "assistant", "content": t.ai_response})
+        else:
+            # Fallback to any provided conversation_history from the client
+            if request.conversation_history:
+                for msg in request.conversation_history:
+                    if msg.get("role") == "user":
+                        messages.append({"role": "user", "content": msg["content"]})
+                    elif msg.get("role") == "assistant":
+                        messages.append({"role": "assistant", "content": msg["content"]})
+
         # Add current user message
         messages.append({"role": "user", "content": request.message})
         
-        # Get system prompt from our prompt management system
-        system_prompt = prompt_manager.get_active_prompt()
+        # Get system prompt from prompt manager with task/mode composition
+        system_prompt = prompt_manager.get_prompt(task="chat", mode=request.mode or "text")
+        # Append an explicit enforcement line for voice mode to reduce verbosity further
+        if (request.mode or "text") == "voice":
+            system_prompt = (
+                "MODE=VOICE ENFORCEMENT\n"
+                "- Strictly limit to 1–2 short sentences, no lists, no markdown.\n"
+                "- End with a question.\n\n" + system_prompt
+            )
+        # Guard: chat task must not emit JSON or code blocks
+        system_prompt = (
+            "IMPORTANT CHAT RULES\n"
+            "- Do not output JSON, code blocks, or structured data in chat responses.\n"
+            "- Use plain sentences only.\n\n" + system_prompt
+        )
+        try:
+            print(f"[CE] /api/chat mode={request.mode or 'text'}")
+        except Exception:
+            pass
         
+        # Compute token budget (reduce by 50% in voice mode)
+        base_max_tokens = 1000
+        is_voice_mode = (request.mode or "text") == "voice"
+        max_tokens = int(base_max_tokens * 0.5) if is_voice_mode else base_max_tokens
+        try:
+            print(f"[CE] /api/chat max_tokens={max_tokens} (base={base_max_tokens}, voice={is_voice_mode})")
+        except Exception:
+            pass
+
         # Call Claude Sonnet 4 with dynamic system prompt
         response = client.messages.create(
             model="claude-3-5-sonnet-20241022",
-            max_tokens=1000,
+            max_tokens=max_tokens,
             system=system_prompt,
             messages=messages
         )
@@ -391,6 +472,101 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user
         print(f"Internal server error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+
+# ---- Tutor utilities: Affect classifier & Next-question generator ----
+
+class AffectRequest(BaseModel):
+    last_two_user_turns: List[str]
+
+
+class AffectResponse(BaseModel):
+    affect: Literal["engaged", "confused", "frustrated", "bored", "neutral"]
+    confidence: float
+    evidence: Optional[str] = None
+
+
+@app.post("/api/tutor/affect", response_model=AffectResponse)
+async def classify_affect(payload: AffectRequest):
+    try:
+        system_prompt = prompt_manager.get_prompt(task="affect")
+        # Build a minimal user message instructing JSON-only output
+        turns_joined = "\n\n".join([f"Turn {i+1}: {t}" for i, t in enumerate(payload.last_two_user_turns[-2:])])
+        user_msg = (
+            "Classify learner affect for the last two user turns. "
+            "Return JSON only.\n\n"
+            f"User turns:\n{turns_joined}"
+        )
+        resp = client.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            max_tokens=200,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+        text = resp.content[0].text if resp.content else "{}"
+        import json, re
+        match = re.search(r"\{[\s\S]*\}", text)
+        json_str = match.group(0) if match else text
+        data = json.loads(json_str)
+        return AffectResponse(
+            affect=data.get("affect", "neutral"),
+            confidence=float(data.get("confidence", 0.0)),
+            evidence=data.get("evidence")
+        )
+    except Exception as e:
+        print(f"Affect classification failed: {e}")
+        raise HTTPException(status_code=500, detail="Affect classification failed")
+
+
+class NextQuestionContext(BaseModel):
+    concept_id: Optional[str] = None
+    recent_performance: Optional[str] = None  # brief summary text
+    recent_affect: Optional[str] = None       # engaged|confused|...
+    mode: Optional[Literal["text", "voice"]] = None
+
+
+@app.post("/api/tutor/next-question")
+async def generate_next_question(ctx: NextQuestionContext):
+    try:
+        system_prompt = prompt_manager.get_prompt(task="next_question")
+        # Provide compact context; enforce JSON-only output in the user message
+        context_lines = []
+        if ctx.concept_id:
+            context_lines.append(f"concept_id: {ctx.concept_id}")
+        if ctx.recent_performance:
+            context_lines.append(f"recent_performance: {ctx.recent_performance}")
+        if ctx.recent_affect:
+            context_lines.append(f"recent_affect: {ctx.recent_affect}")
+        if ctx.mode:
+            context_lines.append(f"mode: {ctx.mode}")
+        context_blob = "\n".join(context_lines) if context_lines else "(no extra context)"
+
+        user_msg = (
+            "Generate the single best next question for this learner now. "
+            "Return JSON only matching the schema described in the system prompt.\n\n"
+            f"Context:\n{context_blob}"
+        )
+
+        resp = client.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            max_tokens=600,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+
+        text = resp.content[0].text if resp.content else "{}"
+        import json, re
+        match = re.search(r"\{[\s\S]*\}", text)
+        json_str = match.group(0) if match else text
+        data = json.loads(json_str)
+
+        # Optional: validate shape lightly (presence of keys)
+        if not (isinstance(data, dict) and "item" in data):
+            raise ValueError("Invalid next-question JSON")
+
+        return data
+    except Exception as e:
+        print(f"Next-question generation failed: {e}")
+        raise HTTPException(status_code=500, detail="Next-question generation failed")
 
 @app.get("/api/conversations", response_model=List[ConversationSummary])
 async def list_conversations(limit: int = 20, offset: int = 0, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
