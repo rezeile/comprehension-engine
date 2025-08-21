@@ -1,4 +1,4 @@
-# Comprehension Engine
+# Graspy
 
 An AI-powered tutoring system with a modern chat interface, built with React frontend and FastAPI backend, integrated with Anthropic Claude Sonnet 4.
 
