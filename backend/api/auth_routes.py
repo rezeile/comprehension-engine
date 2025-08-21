@@ -19,7 +19,6 @@ from auth import (
     create_access_token,
     create_refresh_token,
     verify_token,
-    get_current_user,
     get_current_active_user
 )
 from auth.oauth import get_google_user_info
@@ -86,11 +85,11 @@ async def auth_callback(request: Request, db: Session = Depends(get_db)):
             base_url = str(request.base_url).rstrip('/')
             if base_url == "http://" or base_url == "https://":
                 base_url = "http://localhost:8000"
-        redirect_uri = f"{base_url}/api/auth/callback"
 
-        # Get access token from Google (explicitly pass redirect_uri to avoid mismatch behind proxies)
+        # Get access token from Google; Authlib derives redirect_uri from session/state
+        # Passing it explicitly can duplicate the param in some versions, causing a TypeError
         print(f"Getting access token...")
-        token = await google_oauth.authorize_access_token(request, redirect_uri=redirect_uri)
+        token = await google_oauth.authorize_access_token(request)
         print(f"Got token: {token.keys() if token else 'None'}")
         
         # Get user info from Google using the access token
