@@ -77,6 +77,13 @@ class PromptVariantManager:
         
         # Fallback to default prompt
         return DEFAULT_PROMPT.get_content()
+
+    def get_prompt(self, task: str = "chat", mode: Optional[str] = None) -> str:
+        """
+        Backward/compat shim used by API handlers.
+        Currently returns the active prompt content, ignoring task/mode.
+        """
+        return self.get_active_prompt()
     
     def _check_and_reload_env_config(self) -> None:
         """Check if environment configuration has changed and reload if necessary."""

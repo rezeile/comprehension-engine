@@ -30,7 +30,6 @@ from database.connection import init_db
 
 # Import API routes
 from api.auth_routes import router as auth_router
-from api.knowledge_routes import router as knowledge_router
 from auth.dependencies import get_current_user
 
 # ElevenLabs imports
@@ -85,7 +84,6 @@ app.add_middleware(
 
 # Include routes
 app.include_router(auth_router)
-app.include_router(knowledge_router)
 
 # Initialize Anthropic client
 api_key = os.getenv("ANTHROPIC_API_KEY")
