@@ -1,7 +1,6 @@
 import React from 'react';
 // icons are handled in controls; no direct usage here
 import VoiceStatusIndicator from './VoiceStatusIndicator';
-import TranscriptionDisplay from './TranscriptionDisplay';
 import VoiceModeControls from './VoiceModeControls';
 import AssistantBlock from '../ChatMessages/AssistantBlock';
 import UserChip from '../ChatMessages/UserChip';
@@ -12,13 +11,9 @@ interface VoiceModeProps {
   transcriptionText: string;
   isSpeaking: boolean;
   isRecording: boolean;
-  isInCooldown: boolean;
-  isAudioSettling: boolean;
   isLoading: boolean;
-  forcedSilenceEndTime: number;
   onExit: () => void;
   onSendMessage: () => void;
-  onForceActivate: () => void;
   overlay?: boolean;
   contextMessages?: Message[];
 }
@@ -27,13 +22,9 @@ const VoiceMode: React.FC<VoiceModeProps> = ({
   transcriptionText,
   isSpeaking,
   isRecording,
-  isInCooldown,
-  isAudioSettling,
   isLoading,
-  forcedSilenceEndTime,
   onExit,
   onSendMessage,
-  onForceActivate,
   overlay = false,
   contextMessages = []
 }) => {
@@ -59,16 +50,6 @@ const VoiceMode: React.FC<VoiceModeProps> = ({
           isSpeaking={isSpeaking}
           isRecording={isRecording}
           isLoading={isLoading}
-        />
-        
-        <TranscriptionDisplay
-          transcriptionText={transcriptionText}
-          isSpeaking={isSpeaking}
-          isInCooldown={isInCooldown}
-          isAudioSettling={isAudioSettling}
-          isLoading={isLoading}
-          forcedSilenceEndTime={forcedSilenceEndTime}
-          onForceActivate={onForceActivate}
         />
       </div>
       

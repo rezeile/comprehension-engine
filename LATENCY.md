@@ -1,19 +1,14 @@
-## Voice Mode Latency Diagnosis and Fix Plan
+## Voice Mode Latency – Index
 
-This document traces the voice pipeline end‑to‑end and ranks the biggest contributors to perceived delay, with concrete code‑level fixes for each.
+The latency plan is split into focused documents for each layer:
 
-### Current pipeline (observed)
+- iOS: `IOS-LATENCY.md`
+- Web: `WEB-LATENCY.md`
+- Backend: `BACKEND-LATENCY.md`
 
-1. Frontend transcribes speech (Web Speech API).
-2. On send, frontend calls `POST /api/chat` with the entire conversation history (see `frontend/src/hooks/useChat.ts`).
-3. Backend calls Anthropic with a non‑streaming request (see `backend/main.py -> chat()`), waits for the full model response, persists it, and returns the whole text.
-4. Frontend receives the complete text, adds an assistant message, then calls `POST /api/tts` (see `VoiceService.textToSpeech`).
-5. Backend calls ElevenLabs `generate(...)` and returns the audio bytes as a streaming HTTP response.
-6. Frontend downloads the entire audio as a Blob (`response.blob()`), then plays it.
-
-Net effect: Users wait for (Claude full response time) + (ElevenLabs synthesis time) + (audio download time) before hearing anything.
-
----
+Shared goals across all layers:
+- First audio ≤ 1.0s from Claude first token (stretch ≤ 600ms)
+- Start playback as soon as audio bytes arrive (streaming everywhere)
 
 ### Ranked latency culprits and fixes
 
@@ -110,6 +105,14 @@ async def voice_chat(request: ChatRequest):
     return StreamingResponse(audio_stream(), media_type='audio/mpeg')
 ```
 
+Implementation notes (server):
+- Prefer ElevenLabs low-latency options (optimize_streaming_latency, lower sample rate/bitrate). For sentence-level streaming, issue parallel synthesis per sentence and yield in order.
+- Keep one Anthropic and one ElevenLabs client per process to reuse HTTP/2 connections.
+
+Implementation notes (iOS):
+- Add a `GET /api/voice_chat` streaming endpoint client. Use `URLSession` with a `Bytes`/delegate to read bytes and feed them into `AVAudioEngine` + `AVAudioPlayerNode` as PCM frames. Begin playback on first buffer.
+- Alternatively, if backend streams MP3, decode frames incrementally; PCM is simpler for live streaming.
+
 4) Large `conversation_history` payloads from the frontend
 - Evidence: `useChat` sends all prior messages every turn; backend also persists conversations and could rebuild state from DB.
 - Impact: Larger request payloads and token usage on every turn.
@@ -144,6 +147,106 @@ messages.append({"role": "user", "content": request.message})
 - Evidence: using default `generate(...)` without low‑latency tuning.
 - Impact: Adds 200–800ms avoidable latency.
 - Fix: if available in your SDK, set low‑latency/streaming options (e.g., `optimize_streaming_latency="4"`, lower bitrate like `mp3_22050_64`) and stream the bytes.
+
+<!-- 6) Streaming STT (optional but synergistic)
+- Motivation: Start Claude generation before user completely finishes speaking by sending partial transcripts. This overlaps user speech, model thinking, and TTS.
+- Plan:
+  - Web: stream partial STT to backend via WebSocket/SSE (`/api/stt/ingest`) with a conversation turn ID; backend accumulates and can begin Claude streaming when confidence crosses threshold.
+  - iOS: we already have on-device partials; optionally POST/SSE partials to backend similarly to start Claude earlier. Gate by VAD / punctuation to avoid premature prompts. -->
+
+---
+
+### Phased implementation plan
+
+Phase 0 – Observability hardening (today)
+- Keep the iOS timestamps you added and add correlation IDs per turn (uuid in request header) propagated to backend logs.
+- Backend: log t0 (HTTP start), t1 (first Claude token), t2 (first audio bytes to client), t3 (stream end). Emit deltas.
+
+Phase 1 – Quick wins (tomorrow)
+- Lower TTS output size: switch to a smaller audio format (e.g., `mp3_22050_64` or similar) to reduce bytes and time-to-first-byte.
+- Reduce voice-mode response length: lower max tokens and add “be concise for voice” instruction.
+- Use a faster model for voice (Claude Haiku 3.5) while keeping Sonnet for typed mode.
+- Backend: reuse persistent clients; avoid Cloudflare tunnel for latency tests; co-locate backend near client.
+
+Phase 2 – Claude streaming (SSE)
+- Backend: add `/api/chat/stream` using Anthropic streaming, emitting only text deltas.
+- Client (web): consume SSE and build message incrementally; start early TTS (Phase 3) on first complete sentence.
+- Client (iOS): either keep current path or call a new combined `/api/voice_chat` in Phase 3.
+
+Phase 3 – TTS streaming and early playback
+- Backend v1: keep `/api/tts` but switch to streaming response; clients stream-play (web via MSE; iOS via `AVAudioEngine`).
+- Backend v2 (preferred): implement `/api/voice_chat` that:
+  - Streams Claude deltas.
+  - Detects sentence boundaries; for each sentence, synthesizes with ElevenLabs and streams audio bytes immediately.
+  - Uses `optimize_streaming_latency` and a lower audio bitrate.
+- Client (iOS): implement an audio streaming player:
+
+```swift
+// Sketch: streaming PCM playback
+let engine = AVAudioEngine()
+let player = AVAudioPlayerNode()
+let format = AVAudioFormat(standardFormatWithSampleRate: 16000, channels: 1)!
+engine.attach(player)
+engine.connect(player, to: engine.mainMixerNode, format: format)
+try engine.start()
+player.play()
+
+// As bytes arrive from URLSession delegate:
+let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames)!
+// Fill buffer.floatChannelData… then
+player.scheduleBuffer(buffer, completionHandler: nil)
+```
+
+<!-- Phase 4 – Streaming STT (optional)
+- Web/iOS: send partial transcripts to backend; backend begins Claude streaming when partials stabilize, further reducing t0→first token. -->
+
+---
+
+### Configuration knobs to apply
+- ElevenLabs
+  - optimize_streaming_latency = highest acceptable setting
+  - audio format: mono, 16 kHz, lower bitrate (e.g., `mp3_22050_64`) or raw PCM for lowest start time
+- Claude
+  - Use Haiku 3.5 for voice mode
+  - Lower max_tokens for voice; ensure “concise spoken style” prompt
+- Networking
+  - Persistent HTTP/2 clients
+  - Avoid tunnels in production
+  - Co-locate compute with client region
+
+---
+
+### Validation & SLOs
+- Log the following per turn with a correlation ID:
+  - t0: send
+  - t1: first Claude token (server side)
+  - t2: first audio byte to client
+  - t3: audio playback start (client)
+  - t4: audio playback end (client)
+- Success if:
+  - t1−t0 ≤ 700ms on p50; ≤ 1.2s p95
+  - t2−t1 ≤ 400ms on p50; ≤ 800ms p95
+  - t3−t2 ≤ 150ms on p50; ≤ 300ms p95
+
+---
+
+### Task breakdown (for implementation tomorrow)
+1) Backend
+   - [x] Add `/api/chat/stream` (SSE) with Anthropic streaming
+   - [x] Add `/api/tts` streaming response (chunked audio)
+   - [x] Add `/api/voice_chat` streaming audio composed from sentence-chunk TTS
+   - [x] Configure ElevenLabs low-latency settings; pick smaller audio format
+   - [x] Reuse HTTP clients; ensure keep-alive
+2) Web frontend
+   - [ ] Replace Blob TTS with MSE streaming
+   - [ ] Consume SSE from `/api/chat/stream`; start early TTS on sentence boundaries
+3) iOS client
+   - [ ] Implement streaming audio playback with `AVAudioEngine` + `AVAudioPlayerNode`
+   - [ ] Add support for `/api/voice_chat` to get audio directly
+   - [ ] Add concise voice prompt + lower max tokens for voice path
+4) Observability
+   - [ ] Add correlation IDs and emit t0..t4 across services
+   - [ ] Dashboards for p50/p95 per stage
 
 6) Frontend audio gating delay
 - Evidence: after speaking ends, recording resumes with a `setTimeout(..., 500)` in `ChatInterface.tsx`.

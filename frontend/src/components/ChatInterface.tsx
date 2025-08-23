@@ -24,13 +24,78 @@ interface ChatInterfaceProps {
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
   // Use custom hooks for state management
   const navigate = useNavigate();
-  const { 
-    messages, 
-    isLoading, 
+  const ttsDebug = process.env.REACT_APP_TTS_TIMING_DEBUG === 'true';
+  // Sentence ordering buffer for streaming
+  const expectedSentenceIdxRef = useRef<number>(0);
+  const sentenceBufferRef = useRef<Map<number, string>>(new Map());
+  const streamEnqueueRef = useRef<(s: string) => void>(() => {});
+  const streamEnqueueReadyRef = useRef<boolean>(false);
+  const currentVoiceTurnStartRef = useRef<number>(0);
+  const enqueuedSentenceIdxRef = useRef<Set<number>>(new Set());
+  const lastEnqueuedTextRef = useRef<string>('');
+  const flushBufferedSentencesRef = useRef<() => void>(() => {});
+  const pendingTtsCountRef = useRef<number>(0);
+  const setPendingTtsCount = useState<number>(0)[1];
+  // Prevent STT from resuming until first audio actually starts
+  const awaitingSpeechStartRef = useRef<boolean>(false);
+  // Block any auto-speak in chat mode after exiting voice mode
+  const blockAutoSpeakRef = useRef<boolean>(false);
+  const onStreamSentenceWithIndex = (sentence: string, index: number) => {
+    try {
+      const s = (sentence || '').trim();
+      if (!s) return;
+      sentenceBufferRef.current.set(index, s);
+      flushBufferedSentencesRef.current();
+    } catch {}
+  };
+
+  const {
+    messages,
+    isLoading,
+    isStreaming,
     sendMessage,
+    // sendMessageStreamed,
     hydrateFromTurns,
     clearMessages
-  } = useChat({ conversationId });
+  } = useChat({
+    conversationId,
+    // Use ordered callback to guarantee FIFO even if network delivers out-of-order
+    onStreamSentenceWithIndex,
+    onStreamStart: () => {
+      // New assistant turn begins: cancel any in-progress TTS and clear queued sentences
+      resetQueue();
+      // Reset ordering buffer
+      expectedSentenceIdxRef.current = 0;
+      sentenceBufferRef.current.clear();
+      enqueuedSentenceIdxRef.current.clear();
+      currentVoiceTurnStartRef.current = Date.now();
+      pendingTtsCountRef.current = 0;
+      setPendingTtsCount(0);
+      if (ttsDebug) {
+        // eslint-disable-next-line no-console
+        console.log('[TTSQ] stream-start', { ts: Date.now() });
+      }
+      // Enqueue function is already bound at mount; mark ready and flush any early arrivals
+      streamEnqueueReadyRef.current = true;
+      flushBufferedSentencesRef.current();
+      // Pause STT immediately before first sentence begins
+      if (isVoiceMode && isRecognitionRecording) {
+        try { stopRecording(); } catch {}
+      }
+    },
+    onStreamDone: () => {
+      // Prevent auto-speak of the full message after sentence streaming
+      const last = messages[messages.length - 1];
+      if (last && last.sender === 'assistant') {
+        if (!spokenMessageIds.current.has(last.id)) {
+          spokenMessageIds.current.add(last.id);
+          saveSpokenMessage(last.id);
+        }
+      }
+    }
+  });
+
+  // (moved below after hooks initialized)
   
   // Track when we're in the "sending message" state (user clicked send, waiting for AI)
   const [isSendingMessage, setIsSendingMessage] = useState(false);
@@ -126,36 +191,81 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
   const {
     isSpeaking,
     speak,
-    isElevenLabsEnabled: isElevenLabsSupported
+    resetQueue,
+    stop,
+    unlockAudio,
+    isElevenLabsEnabled: isElevenLabsSupported,
+    streamVoiceChat
   } = useVoiceSynthesis({
     onStart: () => {
       // Handle speech start - now we can reset the sending state
       setIsSendingMessage(false);
     },
     onEnd: () => {
-      // Handle speech end
+      // Handle speech end and try to drain next buffered sentence
+      if (pendingTtsCountRef.current > 0) {
+        pendingTtsCountRef.current -= 1;
+        setPendingTtsCount(pendingTtsCountRef.current);
+        if (ttsDebug) {
+          // eslint-disable-next-line no-console
+          console.log('[TTSQ] onEnd: pending--', { pending: pendingTtsCountRef.current, ts: Date.now() });
+        }
+      }
+      flushBufferedSentencesRef.current();
     }
   });
+
+  // Keep an always-fresh flusher that knows the latest speaking state
+  useEffect(() => {
+    flushBufferedSentencesRef.current = () => {
+      if (!streamEnqueueReadyRef.current) return;
+      if (sentenceBufferRef.current.has(expectedSentenceIdxRef.current)) {
+        const s = sentenceBufferRef.current.get(expectedSentenceIdxRef.current) || '';
+        if (!s.trim()) return;
+        // Deduplicate by index in case of malformed repeats
+        if (enqueuedSentenceIdxRef.current.has(expectedSentenceIdxRef.current)) return;
+        // Deduplicate by content (normalize whitespace and punctuation spacing)
+        const norm = s.replace(/\s+/g, ' ').trim();
+        if (lastEnqueuedTextRef.current === norm) {
+          sentenceBufferRef.current.delete(expectedSentenceIdxRef.current);
+          enqueuedSentenceIdxRef.current.add(expectedSentenceIdxRef.current);
+          expectedSentenceIdxRef.current += 1;
+          return;
+        }
+        // Track a pending TTS unit before enqueue
+        pendingTtsCountRef.current += 1;
+        setPendingTtsCount(pendingTtsCountRef.current);
+        streamEnqueueRef.current(s);
+        sentenceBufferRef.current.delete(expectedSentenceIdxRef.current);
+        enqueuedSentenceIdxRef.current.add(expectedSentenceIdxRef.current);
+        lastEnqueuedTextRef.current = norm;
+        expectedSentenceIdxRef.current += 1;
+      }
+    };
+  }, [isSpeaking, setPendingTtsCount]);
+
+  // Placeholder; actual binding is placed after selectedVoice and voiceState are defined
   
   const {
     isVoiceMode,
     transcriptionText,
-    isAudioSettling,
     isInCooldown,
-    forcedSilenceEndTime,
     enterVoiceMode,
     exitVoiceMode,
     updateTranscription,
-    clearTranscription,
-    forceMicrophoneActivation
+    clearTranscription
   } = useVoiceMode({
     onEnter: () => {
       // Don't start recording here - let the toggle function handle it
+      blockAutoSpeakRef.current = false;
     },
     onExit: () => {
       stopRecording();
+      // Stop any TTS and clear queue
+      stop();
       // Clear transcription when exiting voice mode
       updateTranscription('', false);
+      blockAutoSpeakRef.current = true;
     }
   });
 
@@ -179,6 +289,27 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
   // Initialize VoiceService
   const voiceService = useMemo(() => new VoiceService(), []);
   const conversationService = useMemo(() => new ConversationService(), []);
+
+  // Bind the stream enqueue function after hooks and state are initialized
+  useEffect(() => {
+    streamEnqueueRef.current = (s: string) => {
+      if (!isVoiceModeRef.current) return;
+      if (!voiceState.voiceEnabled) return;
+      speak(s, selectedVoice, true, true);
+    };
+    // Try a flush in case sentences arrived before binding
+    flushBufferedSentencesRef.current();
+    streamEnqueueReadyRef.current = true;
+  }, [speak, selectedVoice, voiceState.voiceEnabled]);
+
+  // Bind the stream enqueue function after voice state is available
+  useEffect(() => {
+    streamEnqueueRef.current = (s: string) => {
+      if (!isVoiceModeRef.current) return;
+      if (!voiceState.voiceEnabled) return;
+      speak(s, selectedVoice, true, true);
+    };
+  }, [speak, selectedVoice, voiceState.voiceEnabled]);
 
   // History drawer state
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
@@ -214,10 +345,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
     loadVoices();
   }, [voiceService]);
 
-  // Auto-speak AI responses only when explicitly in voice mode (not on initial load)
+  // Auto-speak AI responses only when NOT in voice mode and only if user has voice explicitly enabled
   useEffect(() => {
-    if (isVoiceMode && voiceState.voiceEnabled && messages.length > 1) {
+    if (isVoiceMode) return; // voice mode handled by sentence streaming
+    if (!voiceState.voiceEnabled) return; // never auto-speak in text mode unless explicitly enabled
+    if (blockAutoSpeakRef.current) return; // block auto speak after exit
+    if (isStreaming) return; // guard during streaming to avoid full-message auto-speak
+    if (messages.length > 1) {
       const lastMessage = messages[messages.length - 1];
+      // If the last assistant message belongs to the current streamed turn, skip auto-speak after exit
+      if (lastMessage.sender === 'assistant' && currentVoiceTurnStartRef.current > 0 && lastMessage.timestamp.getTime() >= currentVoiceTurnStartRef.current) {
+        return;
+      }
       
       // Check if we've exceeded retry attempts for this message
       const retryCount = failedSpeechAttempts.current.get(lastMessage.id) || 0;
@@ -261,7 +400,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
         }
       }
     }
-  }, [messages, isVoiceMode, voiceState.voiceEnabled, isLoading, speak, isElevenLabsSupported, selectedVoice, isSpeaking, saveSpokenMessage]);
+  }, [messages, isVoiceMode, isStreaming, voiceState.voiceEnabled, isLoading, speak, isElevenLabsSupported, selectedVoice, isSpeaking, saveSpokenMessage]);
 
   // Create stable references for the recording functions
   const stableStopRecording = useCallback(() => {
@@ -284,12 +423,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
       // When AI stops speaking, resume speech recognition if we're still in voice mode
       // Add a small delay to avoid audio feedback issues
       setTimeout(() => {
-        if (isVoiceMode && !isRecognitionRecording && !isRecognitionRunning) {
+        // Do not resume STT if we are still in a streamed assistant turn or have buffered sentences
+        const hasBuffered = sentenceBufferRef.current.size > 0;
+        if (isVoiceMode && !isRecognitionRecording && !isRecognitionRunning && !isStreaming && !hasBuffered && !awaitingSpeechStartRef.current) {
           stableStartRecording();
         }
-      }, 500);
+      }, 300);
     }
-  }, [isSpeaking, isVoiceMode, isRecognitionRecording, isRecognitionRunning, stableStopRecording, stableStartRecording]);
+  }, [isSpeaking, isVoiceMode, isRecognitionRecording, isRecognitionRunning, isStreaming, stableStopRecording, stableStartRecording]);
 
   // Voice input functions - now handled by custom hooks
   const toggleVoiceRecording = () => {
@@ -302,6 +443,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
       // Track when voice mode is entered
       
       enterVoiceMode();
+      // Best-effort unlock of autoplay on user gesture
+      void unlockAudio();
       
       // Start recording after entering voice mode, but only if not already recording
       setTimeout(() => {
@@ -349,12 +492,37 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
       clearTranscription();
     }
 
-    // Use the sendMessage function from useChat hook
+    // Use voice_chat streaming path in voice mode, normal path otherwise
     try {
-      const returnedConversationId = await sendMessage(messageToSend);
+      // Cancel any in-progress TTS and clear queue at the moment a new turn starts
+      resetQueue();
+      let returnedConversationId: string | undefined = undefined;
+      if (isVoiceMode) {
+        // Stream full audio turn via hook to ensure speaking state flips immediately
+        const history = messages.slice(1).map(m => ({ role: m.sender as 'user' | 'assistant', content: m.content }));
+        try { await unlockAudio(); } catch {}
+        try {
+          awaitingSpeechStartRef.current = true;
+          returnedConversationId = await streamVoiceChat(messageToSend, history, selectedVoice, undefined, conversationId);
+        } catch (e) {
+          console.error('voice_chat stream failed', e);
+        }
+      } else {
+        returnedConversationId = await sendMessage(messageToSend);
+      }
       // If backend returned a conversation id and route doesn't match, navigate
       if (returnedConversationId && returnedConversationId !== conversationId) {
         navigate(`/c/${returnedConversationId}`);
+      }
+      // Proactively refresh turns so the new voice response appears without a full refresh
+      try {
+        const convoId = returnedConversationId || conversationId;
+        if (convoId && convoId !== 'new') {
+          const turns = await conversationService.listTurns(convoId, 200, 0);
+          hydrateFromTurns(turns);
+        }
+      } catch (e) {
+        console.error('post-stream hydrate failed', e);
       }
     } catch (error) {
       console.error('Error sending message:', error);
@@ -414,13 +582,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
             transcriptionText={transcriptionText}
             isSpeaking={isSpeaking}
             isRecording={isRecognitionRecording}
-            isInCooldown={isInCooldown}
-            isAudioSettling={isAudioSettling}
             isLoading={isLoading || isSendingMessage}
-            forcedSilenceEndTime={forcedSilenceEndTime}
             onExit={exitVoiceMode}
             onSendMessage={() => handleSendMessage()}
-            onForceActivate={forceMicrophoneActivation}
           />
         ) : (
           // Normal chat view (or when overlay is active, we hide messages/input below via blur)
@@ -459,13 +623,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
           transcriptionText={transcriptionText}
           isSpeaking={isSpeaking}
           isRecording={isRecognitionRecording}
-          isInCooldown={isInCooldown}
-          isAudioSettling={isAudioSettling}
           isLoading={isLoading || isSendingMessage}
-          forcedSilenceEndTime={forcedSilenceEndTime}
           onExit={exitVoiceMode}
           onSendMessage={() => handleSendMessage()}
-          onForceActivate={forceMicrophoneActivation}
           overlay={true}
           contextMessages={messages.slice(-2)}
         />

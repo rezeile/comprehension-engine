@@ -21,7 +21,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
   return (
     <div className="chat-header">
       <h1>Graspy</h1>
-      <p>AI-Powered Learning Assistant</p>
+      <p>Your AI-Powered Learning Assistant</p>
       
       {/* Left controls (settings & notices) */}
       <div className="voice-controls-header">

@@ -17,22 +17,17 @@ const VoiceStatusIndicator: React.FC<VoiceStatusIndicatorProps> = ({
         {isLoading ? (
           <>
             <div className="mic-ring mic-ring--neutral" aria-hidden />
-            <p>Just a sec... sending message</p>
+            <p>Thinking...</p>
           </>
         ) : isSpeaking ? (
           <>
             <div className="mic-ring mic-ring--ai" aria-hidden />
             <p>Antoni is speaking...</p>
           </>
-        ) : isRecording ? (
+        ) : (
           <>
             <div className="mic-ring mic-ring--user" aria-hidden />
             <p>Listening...</p>
-          </>
-        ) : (
-          <>
-            <div className="mic-ring mic-ring--neutral" aria-hidden />
-            <p>Ready</p>
           </>
         )}
       </div>

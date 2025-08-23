@@ -25,7 +25,7 @@ const TranscriptionDisplay: React.FC<TranscriptionDisplayProps> = ({
         {isLoading ? (
           // Show "sending message" state
           <div className="transcription-textarea" style={{ color: 'rgba(255, 255, 255, 0.7)', fontStyle: 'italic', textAlign: 'center' }}>
-            Just a sec... sending message
+            Thinking...
           </div>
         ) : isSpeaking ? (
           // Show status when AI is speaking

@@ -14,15 +14,6 @@ function ChatRouteWrapper() {
   return <ChatInterface conversationId={conversationId} />;
 }
 
-function RedirectToLatestConversation() {
-  const navigate = useNavigate();
-  useEffect(() => {
-    // Simply render ChatInterface without an id; the component will decide to create or navigate
-    navigate('/c/new', { replace: true });
-  }, [navigate]);
-  return null;
-}
-
 function App() {
   useEffect(() => {
     // Initialize Mixpanel with token from environment

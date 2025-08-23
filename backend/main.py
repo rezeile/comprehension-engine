@@ -3,12 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from starlette.middleware.sessions import SessionMiddleware
 try:
-    from starlette.middleware.proxy_headers import ProxyHeadersMiddleware  # Starlette <0.48
-except Exception:
-    try:
-        from starlette.middleware.proxyheaders import ProxyHeadersMiddleware  # Alternate location in some versions
-    except Exception:
-        ProxyHeadersMiddleware = None  # Optional; skip if unavailable
+    from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+except ImportError:
+    ProxyHeadersMiddleware = None  # Optional; skip if unavailable
 from pydantic import BaseModel
 from typing import List, Optional, Literal
 from uuid import UUID
@@ -16,6 +13,8 @@ import anthropic
 import os
 from dotenv import load_dotenv
 import io
+import json
+import httpx
 from sqlalchemy.orm import Session
 from time import perf_counter
 import re
@@ -35,7 +34,6 @@ from auth.dependencies import get_current_user
 # ElevenLabs imports
 try:
     from elevenlabs import generate, set_api_key
-    from elevenlabs import Voice
     ELEVENLABS_AVAILABLE = True
 except ImportError:
     ELEVENLABS_AVAILABLE = False
@@ -85,12 +83,30 @@ app.add_middleware(
 # Include routes
 app.include_router(auth_router)
 
-# Initialize Anthropic client
+# Initialize Anthropic client with persistent HTTP/2 session (keep-alive)
 api_key = os.getenv("ANTHROPIC_API_KEY")
 if not api_key or api_key == "your-api-key-here":
     raise ValueError("ANTHROPIC_API_KEY environment variable is not set or is invalid")
-
-client = anthropic.Anthropic(api_key=api_key)
+try:
+    _anthropic_http = httpx.Client(
+        http2=True,
+        timeout=httpx.Timeout(30.0),
+        limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+        headers={"Connection": "keep-alive"},
+    )
+except Exception as e:
+    print(f"Warning: HTTP/2 not available for Anthropic client, falling back to HTTP/1.1 keep-alive: {e}")
+    _anthropic_http = httpx.Client(
+        http2=False,
+        timeout=httpx.Timeout(30.0),
+        limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+        headers={"Connection": "keep-alive"},
+    )
+try:
+    client = anthropic.Anthropic(api_key=api_key, http_client=_anthropic_http)
+except TypeError:
+    # Older SDKs may not accept http_client; fall back to default construction
+    client = anthropic.Anthropic(api_key=api_key)
 
 # Initialize ElevenLabs if available
 if ELEVENLABS_AVAILABLE:
@@ -100,6 +116,53 @@ if ELEVENLABS_AVAILABLE:
         print("ElevenLabs API configured successfully")
     else:
         print("Warning: ELEVENLABS_API_KEY not set. TTS will use fallback.")
+
+# Persistent HTTP client for ElevenLabs (keep-alive, HTTP/2 when supported)
+try:
+    _eleven_http = httpx.Client(
+        http2=True,
+        timeout=httpx.Timeout(30.0),
+        limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+        headers={
+            "Connection": "keep-alive",
+            # xi-api-key header is set per-request below to avoid logging in client repr
+        },
+    )
+except Exception as e:
+    print(f"Warning: HTTP/2 not available for ElevenLabs client, falling back to HTTP/1.1 keep-alive: {e}")
+    _eleven_http = httpx.Client(
+        http2=False,
+        timeout=httpx.Timeout(30.0),
+        limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+        headers={
+            "Connection": "keep-alive",
+        },
+    )
+
+def eleven_stream_tts(text: str, voice_id: str, latency: int = 1, chunk_size: int = 2048, model_id: str = "eleven_multilingual_v2"):
+    api_key = os.getenv("ELEVENLABS_API_KEY")
+    if not api_key or api_key == "your-elevenlabs-api-key-here":
+        raise HTTPException(status_code=503, detail="ElevenLabs API key not configured")
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream"
+    params = {"optimize_streaming_latency": str(latency)}
+    json_payload = {"text": text, "model_id": model_id}
+    headers = {"xi-api-key": api_key, "accept": "audio/mpeg"}
+    with _eleven_http.stream("POST", url, params=params, json=json_payload, headers=headers) as resp:
+        resp.raise_for_status()
+        for chunk in resp.iter_bytes(chunk_size=chunk_size):
+            if chunk:
+                yield chunk
+
+def eleven_tts_once(text: str, voice_id: str, model_id: str = "eleven_multilingual_v2") -> bytes:
+    api_key = os.getenv("ELEVENLABS_API_KEY")
+    if not api_key or api_key == "your-elevenlabs-api-key-here":
+        raise HTTPException(status_code=503, detail="ElevenLabs API key not configured")
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+    json_payload = {"text": text, "model_id": model_id}
+    headers = {"xi-api-key": api_key, "accept": "audio/mpeg"}
+    resp = _eleven_http.post(url, json=json_payload, headers=headers)
+    resp.raise_for_status()
+    return resp.content
 
 class ChatMessage(BaseModel):
     content: str
@@ -228,7 +291,7 @@ async def get_available_voices():
 
 @app.post("/api/tts")
 async def text_to_speech(request: TTSRequest):
-    """Convert text to speech using ElevenLabs"""
+    """Convert text to speech using ElevenLabs (streaming)."""
     if not ELEVENLABS_AVAILABLE:
         raise HTTPException(status_code=503, detail="ElevenLabs TTS not available")
     
@@ -237,35 +300,39 @@ async def text_to_speech(request: TTSRequest):
         valid_voice_ids = [voice.id for voice in AVAILABLE_VOICES]
         if request.voice_id not in valid_voice_ids:
             raise HTTPException(status_code=400, detail="Invalid voice ID")
-        
-        # Generate speech with ElevenLabs
-        # Low-risk latency reduction: prefer lower-bitrate output and latency optimization if supported
-        output_format = os.getenv("ELEVENLABS_OUTPUT_FORMAT", "mp3_22050_64")
-        optimize_latency = os.getenv("ELEVENLABS_OPTIMIZE_STREAMING_LATENCY", "4")
 
-        base_kwargs = {
-            "text": request.text,
-            "voice": request.voice_id,
-            "model": "eleven_multilingual_v2",
-        }
+        latency = int(os.getenv("ELEVENLABS_STREAM_LATENCY", "1"))
+        chunk_size = int(os.getenv("ELEVENLABS_STREAM_CHUNK_SIZE", "2048"))
 
-        audio = None
-        try:
-            # Newer SDKs accept both parameters
-            audio = generate(**base_kwargs, output_format=output_format, optimize_streaming_latency=optimize_latency)
-        except TypeError:
+        def audio_iter():
             try:
-                # Fallback: some SDKs only accept output_format
-                audio = generate(**base_kwargs, output_format=output_format)
-            except TypeError:
-                # Final fallback: default behavior
-                audio = generate(**base_kwargs)
-        
-        # Return audio as streaming response
+                for chunk in eleven_stream_tts(
+                    text=request.text,
+                    voice_id=request.voice_id,
+                    latency=latency,
+                    chunk_size=chunk_size,
+                    model_id="eleven_multilingual_v2",
+                ):
+                    if chunk:
+                        yield chunk
+            except Exception:
+                # Fallback one-shot
+                audio_bytes = eleven_tts_once(
+                    text=request.text,
+                    voice_id=request.voice_id,
+                    model_id="eleven_multilingual_v2",
+                )
+                if audio_bytes:
+                    yield audio_bytes
+
         return StreamingResponse(
-            io.BytesIO(audio),
+            audio_iter(),
             media_type="audio/mpeg",
-            headers={"Content-Disposition": "attachment; filename=speech.mp3"}
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
         )
         
     except Exception as e:
@@ -363,12 +430,25 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user
             pass
 
         # Call Claude Sonnet 4 with dynamic system prompt
+        t1_send = perf_counter()
+        try:
+            print(f"[VM] t1 sending to claude", {"t_ms": int((t1_send - start_time) * 1000)})
+        except Exception:
+            pass
         response = client.messages.create(
             model="claude-3-5-sonnet-20241022",
             max_tokens=max_tokens,
             system=system_prompt,
             messages=messages
         )
+        t2_recv = perf_counter()
+        try:
+            print(
+                f"[VM] t2 received from claude",
+                {"t_ms": int((t2_recv - start_time) * 1000), "claude_ms": int((t2_recv - t1_send) * 1000)}
+            )
+        except Exception:
+            pass
         
         # Extract the response content
         ai_response = response.content[0].text if response.content else "I apologize, but I couldn't generate a response at this time."
@@ -582,6 +662,289 @@ async def generate_next_question(ctx: NextQuestionContext):
     except Exception as e:
         print(f"Next-question generation failed: {e}")
         raise HTTPException(status_code=500, detail="Next-question generation failed")
+
+@app.post("/api/chat/stream")
+async def chat_stream(request: ChatRequest, current_user: User = Depends(get_current_user)):
+    """Stream assistant text deltas using Anthropic streaming via Server-Sent Events (SSE)."""
+    def sse_generator():
+        try:
+            # Build minimal message list (frontend may later omit history when conversation_id is used)
+            messages: List[dict] = []
+            if request.conversation_history:
+                for msg in request.conversation_history:
+                    role = msg.get("role")
+                    content = msg.get("content")
+                    if role in ("user", "assistant") and content:
+                        messages.append({"role": role, "content": content})
+            messages.append({"role": "user", "content": request.message})
+
+            # Compose system prompt similar to /api/chat
+            system_prompt = prompt_manager.get_prompt(task="chat", mode=request.mode or "text")
+            if (request.mode or "text") == "voice":
+                system_prompt = (
+                    "MODE=VOICE ENFORCEMENT\n"
+                    "- Strictly limit to 1–2 short sentences, no lists, no markdown.\n"
+                    "- End with a question.\n\n" + system_prompt
+                )
+            system_prompt = (
+                "IMPORTANT CHAT RULES\n"
+                "- Do not output JSON, code blocks, or structured data in chat responses.\n"
+                "- Use plain sentences only.\n\n" + system_prompt
+            )
+
+            base_max_tokens = 800
+            is_voice_mode = (request.mode or "text") == "voice"
+            max_tokens = int(base_max_tokens * 0.25) if is_voice_mode else base_max_tokens
+
+            with client.messages.stream(
+                model="claude-3-5-sonnet-20241022",
+                max_tokens=max_tokens,
+                system=system_prompt,
+                messages=messages,
+            ) as stream:
+                for event in stream:
+                    event_type = getattr(event, "type", None)
+                    if event_type == "content_block_delta":
+                        delta_obj = getattr(event, "delta", None)
+                        text_piece = ""
+                        if hasattr(delta_obj, "text") and isinstance(getattr(delta_obj, "text"), str):
+                            text_piece = getattr(delta_obj, "text")
+                        elif isinstance(delta_obj, dict):
+                            text_piece = delta_obj.get("text", "")
+                        elif isinstance(delta_obj, str):
+                            text_piece = delta_obj
+                        if text_piece:
+                            yield f"data: {json.dumps({'delta': text_piece})}\n\n"
+                    elif event_type == "message_stop":
+                        yield "data: {\"done\": true}\n\n"
+        except Exception as e:
+            try:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            finally:
+                yield "data: {\"done\": true}\n\n"
+
+    return StreamingResponse(
+        sse_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable proxy buffering (nginx, etc.)
+        },
+    )
+
+@app.post("/api/voice_chat")
+async def voice_chat(
+    request: ChatRequest,
+    voice_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Stream synthesized audio by chunking Claude streaming output into sentences and TTS-ing each sentence immediately."""
+    if not ELEVENLABS_AVAILABLE:
+        raise HTTPException(status_code=503, detail="ElevenLabs TTS not available")
+
+    # Resolve voice id (validate against known voices)
+    default_voice = os.getenv("ELEVENLABS_DEFAULT_VOICE", "21m00Tcm4TlvDq8ikWAM")
+    selected_voice = voice_id or default_voice
+    valid_voice_ids = [voice.id for voice in AVAILABLE_VOICES]
+    if selected_voice not in valid_voice_ids:
+        raise HTTPException(status_code=400, detail="Invalid voice ID")
+
+    # Resolve conversation (create or reuse) BEFORE starting the stream so we can place it in headers
+    conversation = None
+    header_convo_id = None
+    try:
+        if request.start_new:
+            conversation = Conversation(user_id=current_user.id, title="New Conversation")
+            db.add(conversation)
+            db.commit()
+            db.refresh(conversation)
+        elif request.conversation_id:
+            conversation = (
+                db.query(Conversation)
+                .filter(Conversation.id == request.conversation_id)
+                .first()
+            )
+            if not conversation:
+                raise HTTPException(status_code=404, detail="Conversation not found")
+            if conversation.user_id != current_user.id:
+                raise HTTPException(status_code=403, detail="Forbidden: conversation does not belong to user")
+        else:
+            # Latest active or new
+            conversation = (
+                db.query(Conversation)
+                .filter(Conversation.user_id == current_user.id, Conversation.is_active == True)
+                .order_by(Conversation.created_at.desc())
+                .first()
+            )
+            if not conversation:
+                conversation = Conversation(user_id=current_user.id, title="New Conversation")
+                db.add(conversation)
+                db.commit()
+                db.refresh(conversation)
+        header_convo_id = str(conversation.id)
+    except Exception as e:
+        print(f"voice_chat: pre-resolution failed: {e}")
+        conversation = None
+        header_convo_id = None
+
+    def audio_stream():
+        try:
+            start_time = perf_counter()
+            conversation_id_str: Optional[str] = str(conversation.id) if conversation else None
+
+            # Build messages similar to /api/chat/stream
+            messages: List[dict] = []
+            if request.conversation_history:
+                for msg in request.conversation_history:
+                    role = msg.get("role")
+                    content = msg.get("content")
+                    if role in ("user", "assistant") and content:
+                        messages.append({"role": role, "content": content})
+            messages.append({"role": "user", "content": request.message})
+
+            # Compose system prompt (voice mode rules enforced)
+            system_prompt = prompt_manager.get_prompt(task="chat", mode=request.mode or "voice")
+            system_prompt = (
+                "MODE=VOICE ENFORCEMENT\n"
+                "- Strictly limit to 1–2 short sentences, no lists, no markdown.\n"
+                "- End with a question.\n\n" + system_prompt
+            )
+            system_prompt = (
+                "IMPORTANT CHAT RULES\n"
+                "- Do not output JSON, code blocks, or structured data in chat responses.\n"
+                "- Use plain sentences only.\n\n" + system_prompt
+            )
+
+            base_max_tokens = 800
+            max_tokens = int(base_max_tokens * 0.25)
+
+            # Sentence buffering
+            buffer = ""
+            # Accumulate full assistant text for persistence
+            assistant_text = ""
+
+            with client.messages.stream(
+                model="claude-3-5-sonnet-20241022",
+                max_tokens=max_tokens,
+                system=system_prompt,
+                messages=messages,
+            ) as stream:
+                for event in stream:
+                    event_type = getattr(event, "type", None)
+                    if event_type == "content_block_delta":
+                        delta_obj = getattr(event, "delta", None)
+                        text_piece = ""
+                        if hasattr(delta_obj, "text") and isinstance(getattr(delta_obj, "text"), str):
+                            text_piece = getattr(delta_obj, "text")
+                        elif isinstance(delta_obj, dict):
+                            text_piece = delta_obj.get("text", "")
+                        elif isinstance(delta_obj, str):
+                            text_piece = delta_obj
+                        if text_piece:
+                            buffer += text_piece
+                            # Emit full sentences as they become available
+                            while True:
+                                m = re.search(r"([\s\S]*?[\.!?])\s+", buffer)
+                                if not m:
+                                    break
+                                sentence = m.group(1)
+                                buffer = buffer[m.end():]
+                                assistant_text += sentence
+                                # Stream TTS for this sentence
+                                try:
+                                    latency = int(os.getenv("ELEVENLABS_STREAM_LATENCY", "1"))
+                                    chunk_size = int(os.getenv("ELEVENLABS_STREAM_CHUNK_SIZE", "2048"))
+                                    for chunk in eleven_stream_tts(
+                                        text=sentence,
+                                        voice_id=selected_voice,
+                                        latency=latency,
+                                        chunk_size=chunk_size,
+                                        model_id="eleven_multilingual_v2",
+                                    ):
+                                        if chunk:
+                                            yield chunk
+                                except Exception:
+                                    # Fallback to one-shot synth if streaming path fails
+                                    audio_bytes = eleven_tts_once(
+                                        text=sentence,
+                                        voice_id=selected_voice,
+                                        model_id="eleven_multilingual_v2",
+                                    )
+                                    if audio_bytes:
+                                        yield audio_bytes
+                    elif event_type == "message_stop":
+                        break
+
+            # Flush any remaining buffer
+            if buffer.strip():
+                assistant_text += buffer
+                try:
+                    latency = int(os.getenv("ELEVENLABS_STREAM_LATENCY", "1"))
+                    chunk_size = int(os.getenv("ELEVENLABS_STREAM_CHUNK_SIZE", "2048"))
+                    for chunk in eleven_stream_tts(
+                        text=buffer,
+                        voice_id=selected_voice,
+                        latency=latency,
+                        chunk_size=chunk_size,
+                        model_id="eleven_multilingual_v2",
+                    ):
+                        if chunk:
+                            yield chunk
+                except Exception:
+                    audio_bytes = eleven_tts_once(
+                        text=buffer,
+                        voice_id=selected_voice,
+                        model_id="eleven_multilingual_v2",
+                    )
+                    if audio_bytes:
+                        yield audio_bytes
+            # Persist turn at the end if we resolved a conversation
+            try:
+                if conversation_id_str is not None:
+                    # Determine next turn number
+                    last_turn = (
+                        db.query(ConversationTurn)
+                        .filter(ConversationTurn.conversation_id == conversation.id)
+                        .order_by(ConversationTurn.turn_number.desc())
+                        .first()
+                    )
+                    next_turn_number = (last_turn.turn_number + 1) if last_turn else 1
+                    elapsed_ms = int((perf_counter() - start_time) * 1000)
+                    turn = ConversationTurn(
+                        conversation_id=conversation.id,
+                        turn_number=next_turn_number,
+                        user_input=request.message,
+                        ai_response=assistant_text,
+                        response_time_ms=elapsed_ms,
+                        voice_used=voice_id or os.getenv("ELEVENLABS_DEFAULT_VOICE", "21m00Tcm4TlvDq8ikWAM"),
+                    )
+                    db.add(turn)
+                    db.commit()
+            except Exception as persist_err:
+                print(f"voice_chat: failed to persist turn: {persist_err}")
+
+        except Exception as e:
+            # Log and end stream gracefully
+            try:
+                print(f"/api/voice_chat failed: {e}")
+            except Exception:
+                pass
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    if header_convo_id:
+        headers["X-Conversation-Id"] = header_convo_id
+
+    return StreamingResponse(
+        audio_stream(),
+        media_type="audio/mpeg",
+        headers=headers,
+    )
 
 @app.get("/api/conversations", response_model=List[ConversationSummary])
 async def list_conversations(limit: int = 20, offset: int = 0, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

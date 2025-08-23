@@ -25,7 +25,16 @@ const VoiceModeControls: React.FC<VoiceModeControlsProps> = ({
       </button>
       
       <button
-        onClick={onSendMessage}
+        onClick={() => {
+          try {
+            const cleaned = transcriptionText.replace(/\[interim\].*$/, '').trim();
+            // t0: user taps send (voice mode)
+            console.log('[VM] t0 user tapped send', { ts: Date.now(), length: cleaned.length });
+          } catch (_) {
+            console.log('[VM] t0 user tapped send', { ts: Date.now() });
+          }
+          onSendMessage();
+        }}
         disabled={!transcriptionText.replace(/\[interim\].*$/, '').trim() || isLoading}
         className="voice-control-btn send-btn"
         title="Send transcription"

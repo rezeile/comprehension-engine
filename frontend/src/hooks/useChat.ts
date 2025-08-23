@@ -8,7 +8,11 @@ export const useChat = (options: ChatOptions = {}) => {
     onMessageSent,
     onMessageReceived,
     onError,
-    conversationId
+    conversationId,
+    onStreamSentence,
+    onStreamSentenceWithIndex,
+    onStreamStart,
+    onStreamDone,
   } = options;
 
   // State management
@@ -22,6 +26,7 @@ export const useChat = (options: ChatOptions = {}) => {
       }
     ],
     isLoading: false,
+    isStreaming: false,
     error: null
   });
 
@@ -144,6 +149,167 @@ export const useChat = (options: ChatOptions = {}) => {
     return undefined;
   }, [sendMessageToBackend, onMessageSent, onMessageReceived, onError]);
 
+  // Streaming: send message and consume /api/chat/stream (SSE)
+  const sendMessageStreamed = useCallback(async (content: string): Promise<string | undefined> => {
+    const messageText = content.trim();
+    if (!messageText) return;
+
+    // Push user message immediately
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      content: messageText,
+      sender: 'user',
+      timestamp: new Date()
+    };
+    setState(prev => ({ ...prev, messages: [...prev.messages, userMsg], isLoading: true, isStreaming: true, error: null }));
+    onMessageSent?.(userMsg);
+    onStreamStart?.();
+
+    // Prepare streaming assistant message
+    const assistantId = (Date.now() + 1).toString();
+    let currentAssistantText = '';
+    let ttsBuffer = '';
+
+    const appendAssistant = (delta: string) => {
+      currentAssistantText += delta;
+      setState(prev => ({
+        ...prev,
+        messages: prev.messages.some(m => m.id === assistantId)
+          ? prev.messages.map(m => m.id === assistantId ? { ...m, content: currentAssistantText } : m)
+          : [...prev.messages, { id: assistantId, content: currentAssistantText, sender: 'assistant', timestamp: new Date() }]
+      }));
+    };
+
+    try {
+      const ttsDebug = process.env.REACT_APP_TTS_TIMING_DEBUG === 'true';
+      const turnStartTs = Date.now();
+      let sentenceIndex = 0;
+      if (ttsDebug) {
+        // eslint-disable-next-line no-console
+        console.groupCollapsed(`[TTS] Turn start ${new Date(turnStartTs).toISOString()}`);
+      }
+      // Build request body
+      const conversationHistory = state.messages.slice(1).map(msg => ({ role: msg.sender as 'user' | 'assistant', content: msg.content }));
+      const requestBody: ChatRequest = {
+        message: messageText,
+        conversation_history: conversationHistory,
+        ...(conversationId && conversationId !== 'new' ? { conversation_id: conversationId } : { start_new: true }),
+      };
+
+      const accessToken = localStorage.getItem('access_token');
+      const res = await fetch(`${backendUrl}/api/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error(`SSE request failed: ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+
+      const readLoop = async () => {
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          if (ttsDebug) {
+            // eslint-disable-next-line no-console
+            console.log('[TTS] delta bytes', { len: value?.byteLength ?? 0, ts: Date.now() });
+          }
+          const lines = chunk.split(/\n\n/);
+          for (const block of lines) {
+            const line = block.trim();
+            if (!line.startsWith('data:')) continue;
+            const dataStr = line.replace(/^data:\s*/, '');
+            try {
+              const data = JSON.parse(dataStr);
+              if (typeof data.delta === 'string' && data.delta.length > 0) {
+                appendAssistant(data.delta);
+                // Sentence boundary detection with precise remainder tracking
+                ttsBuffer += data.delta;
+                const re = /([\s\S]*?[.!?])\s+/g;
+                let lastProcessedIndex = 0;
+                let match: RegExpExecArray | null;
+                while ((match = re.exec(ttsBuffer)) !== null) {
+                  const sentence = match[1];
+                  if (sentence && sentence.trim().length > 0) {
+                    if (ttsDebug) {
+                      // eslint-disable-next-line no-console
+                      console.log('[TTS] emit sentence', { idx: sentenceIndex, chars: sentence.length, ts: Date.now(), sample: sentence.slice(0, 60) });
+                    }
+                    onStreamSentenceWithIndex?.(sentence, sentenceIndex);
+                    if (!onStreamSentenceWithIndex) {
+                      onStreamSentence?.(sentence);
+                    }
+                    sentenceIndex += 1;
+                  }
+                  lastProcessedIndex = re.lastIndex;
+                }
+                if (lastProcessedIndex > 0) {
+                  ttsBuffer = ttsBuffer.slice(lastProcessedIndex);
+                }
+              }
+              if (data.done) {
+                // Flush any remaining text as one last sentence
+                if (ttsBuffer.trim().length > 0) {
+                  const flush = ttsBuffer.trim();
+                  if (ttsDebug) {
+                    // eslint-disable-next-line no-console
+                    console.log('[TTS] flush tail sentence', { idx: sentenceIndex, chars: flush.length, ts: Date.now(), sample: flush.slice(0, 60) });
+                  }
+                  onStreamSentenceWithIndex?.(flush, sentenceIndex);
+                  if (!onStreamSentenceWithIndex) {
+                    onStreamSentence?.(flush);
+                  }
+                  sentenceIndex += 1;
+                  ttsBuffer = '';
+                }
+                break;
+              }
+            } catch {
+              // ignore malformed JSON
+            }
+          }
+        }
+      };
+
+      await readLoop();
+
+      setState(prev => ({ ...prev, isLoading: false, isStreaming: false }));
+      onMessageReceived?.({ id: assistantId, content: currentAssistantText, sender: 'assistant', timestamp: new Date() });
+      onStreamDone?.();
+      if (ttsDebug) {
+        // eslint-disable-next-line no-console
+        console.log('[TTS] turn done', { totalChars: currentAssistantText.length, sentences: sentenceIndex, ms: Date.now() - turnStartTs });
+        // eslint-disable-next-line no-console
+        console.groupEnd();
+      }
+      return conversationId;
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : 'Streaming failed';
+      setState(prev => ({ ...prev, isLoading: false, isStreaming: false, error: errMsg }));
+      onError?.(errMsg);
+      onStreamDone?.();
+      const ttsDebug = process.env.REACT_APP_TTS_TIMING_DEBUG === 'true';
+      if (ttsDebug) {
+        // eslint-disable-next-line no-console
+        console.log('[TTS] turn error', { err: errMsg, ts: Date.now() });
+        // eslint-disable-next-line no-console
+        console.groupEnd?.();
+      }
+      return undefined;
+    }
+  }, [backendUrl, conversationId, onError, onMessageReceived, onMessageSent, onStreamSentence, onStreamSentenceWithIndex, onStreamStart, onStreamDone, state.messages]);
+
   // Send message with options
   const sendMessageWithOptions = useCallback(async (options: SendMessageOptions) => {
     const { content, sender, autoScroll = true } = options;
@@ -249,6 +415,7 @@ export const useChat = (options: ChatOptions = {}) => {
     
     // Actions
     sendMessage,
+    sendMessageStreamed,
     sendMessageWithOptions,
     addMessage,
     updateMessage,

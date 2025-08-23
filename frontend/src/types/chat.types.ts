@@ -25,6 +25,8 @@ export interface ChatResponse {
 export interface ChatState {
   messages: Message[];
   isLoading: boolean;
+  // True while an SSE streaming session is active
+  isStreaming?: boolean;
   error: string | null;
 }
 
@@ -34,6 +36,11 @@ export interface ChatOptions {
   onMessageReceived?: (message: Message) => void;
   onError?: (error: string) => void;
   conversationId?: string;
+  // Streaming callbacks (SSE)
+  onStreamSentence?: (sentence: string) => void;
+  onStreamSentenceWithIndex?: (sentence: string, index: number) => void;
+  onStreamStart?: () => void;
+  onStreamDone?: () => void;
 }
 
 export interface SendMessageOptions {

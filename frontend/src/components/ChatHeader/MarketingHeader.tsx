@@ -5,7 +5,7 @@ interface MarketingHeaderProps {
   wordmark?: string;
 }
 
-const MarketingHeader: React.FC<MarketingHeaderProps> = ({ wordmark = 'Graspy' }) => {
+const MarketingHeader: React.FC<MarketingHeaderProps> = ({ wordmark = 'GraspWell' }) => {
   return (
     <header className="marketing-header" role="banner">
       <div className="marketing-header__inner">
