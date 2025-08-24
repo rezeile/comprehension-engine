@@ -315,4 +315,7 @@ config.local.json
 .env.production
 .env.staging
 secrets/
-secrets.json 
+secrets.json
+
+# temprary architecture docs
+docs 
