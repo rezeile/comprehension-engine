@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends
+from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from starlette.middleware.sessions import SessionMiddleware
@@ -139,30 +140,44 @@ except Exception as e:
         },
     )
 
-def eleven_stream_tts(text: str, voice_id: str, latency: int = 1, chunk_size: int = 2048, model_id: str = "eleven_multilingual_v2"):
+def eleven_stream_tts(
+    text: str,
+    voice_id: str,
+    latency: int = 1,
+    chunk_size: int = 2048,
+    model_id: str = "eleven_multilingual_v2",
+    output_mime: str = "audio/mpeg",
+):
     api_key = os.getenv("ELEVENLABS_API_KEY")
     if not api_key or api_key == "your-elevenlabs-api-key-here":
         raise HTTPException(status_code=503, detail="ElevenLabs API key not configured")
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream"
     params = {"optimize_streaming_latency": str(latency)}
     json_payload = {"text": text, "model_id": model_id}
-    headers = {"xi-api-key": api_key, "accept": "audio/mpeg"}
+    headers = {"xi-api-key": api_key, "accept": output_mime}
     with _eleven_http.stream("POST", url, params=params, json=json_payload, headers=headers) as resp:
         resp.raise_for_status()
         for chunk in resp.iter_bytes(chunk_size=chunk_size):
             if chunk:
                 yield chunk
 
-def eleven_tts_once(text: str, voice_id: str, model_id: str = "eleven_multilingual_v2") -> bytes:
+def eleven_tts_once(
+    text: str,
+    voice_id: str,
+    model_id: str = "eleven_multilingual_v2",
+    output_mime: str = "audio/mpeg",
+) -> bytes:
     api_key = os.getenv("ELEVENLABS_API_KEY")
     if not api_key or api_key == "your-elevenlabs-api-key-here":
         raise HTTPException(status_code=503, detail="ElevenLabs API key not configured")
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
     json_payload = {"text": text, "model_id": model_id}
-    headers = {"xi-api-key": api_key, "accept": "audio/mpeg"}
+    headers = {"xi-api-key": api_key, "accept": output_mime}
     resp = _eleven_http.post(url, json=json_payload, headers=headers)
     resp.raise_for_status()
     return resp.content
+
+# (ffmpeg-based PCM transcoding removed by request)
 
 class ChatMessage(BaseModel):
     content: str
@@ -739,6 +754,7 @@ async def voice_chat(
     voice_id: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    raw_request: Request = None,
 ):
     """Stream synthesized audio by chunking Claude streaming output into sentences and TTS-ing each sentence immediately."""
     if not ELEVENLABS_AVAILABLE:
@@ -788,6 +804,19 @@ async def voice_chat(
         print(f"voice_chat: pre-resolution failed: {e}")
         conversation = None
         header_convo_id = None
+
+    # --- Format negotiation ---
+    pcm_env_enabled = os.getenv("PCM_STREAMING_ENABLED", "false").lower() == "true"
+    accept_header = ""
+    client_platform = ""
+    try:
+        if raw_request is not None:
+            accept_header = (raw_request.headers.get("accept") or "").lower()
+            client_platform = (raw_request.headers.get("x-client-platform") or "").lower()
+    except Exception:
+        pass
+    # iOS requests PCM; web stays MP3. Use Accept header and/or client hint.
+    pcm_requested = pcm_env_enabled and (("audio/pcm" in accept_header) or (client_platform == "ios"))
 
     def audio_stream():
         try:
@@ -862,18 +891,23 @@ async def voice_chat(
                                         latency=latency,
                                         chunk_size=chunk_size,
                                         model_id="eleven_multilingual_v2",
+                                        output_mime=("audio/pcm" if pcm_requested else "audio/mpeg"),
                                     ):
                                         if chunk:
                                             yield chunk
                                 except Exception:
-                                    # Fallback to one-shot synth if streaming path fails
-                                    audio_bytes = eleven_tts_once(
-                                        text=sentence,
-                                        voice_id=selected_voice,
-                                        model_id="eleven_multilingual_v2",
-                                    )
-                                    if audio_bytes:
-                                        yield audio_bytes
+                                    # Fallback one-shot in requested format
+                                    try:
+                                        audio_bytes = eleven_tts_once(
+                                            text=sentence,
+                                            voice_id=selected_voice,
+                                            model_id="eleven_multilingual_v2",
+                                            output_mime=("audio/pcm" if pcm_requested else "audio/mpeg"),
+                                        )
+                                        if audio_bytes:
+                                            yield audio_bytes
+                                    except Exception:
+                                        pass
                     elif event_type == "message_stop":
                         break
 
@@ -889,6 +923,7 @@ async def voice_chat(
                         latency=latency,
                         chunk_size=chunk_size,
                         model_id="eleven_multilingual_v2",
+                        output_mime=("audio/pcm" if pcm_requested else "audio/mpeg"),
                     ):
                         if chunk:
                             yield chunk
@@ -897,6 +932,7 @@ async def voice_chat(
                         text=buffer,
                         voice_id=selected_voice,
                         model_id="eleven_multilingual_v2",
+                        output_mime=("audio/pcm" if pcm_requested else "audio/mpeg"),
                     )
                     if audio_bytes:
                         yield audio_bytes
@@ -939,10 +975,11 @@ async def voice_chat(
     }
     if header_convo_id:
         headers["X-Conversation-Id"] = header_convo_id
+    headers["X-Audio-Format"] = ("pcm" if pcm_requested else "mp3")
 
     return StreamingResponse(
         audio_stream(),
-        media_type="audio/mpeg",
+        media_type=("audio/pcm" if pcm_requested else "audio/mpeg"),
         headers=headers,
     )
 
