@@ -20,7 +20,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
   const navigate = useNavigate();
   return (
     <div className="chat-header">
-      <h1>Graspy</h1>
+      <h1>GraspWell</h1>
       <p>Your AI-Powered Learning Assistant</p>
       
       {/* Left controls (settings & notices) */}
