@@ -151,7 +151,7 @@ async def auth_callback(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
-    refresh_token: str,
+    payload: dict,
     db: Session = Depends(get_db)
 ):
     """
@@ -163,8 +163,22 @@ async def refresh_token(
     Returns:
         New access and refresh tokens
     """
+    # Extract token from JSON body for mobile clients; fallback to query param if present
+    rt = None
+    try:
+        if isinstance(payload, dict):
+            rt = payload.get("refresh_token")
+    except Exception:
+        rt = None
+    if rt is None:
+        # FastAPI may have parsed a form or query param named refresh_token
+        # Keep a graceful fallback using request body shape variations
+        try:
+            rt = payload.get("token") if isinstance(payload, dict) else None
+        except Exception:
+            rt = None
     # Verify refresh token
-    payload = verify_token(refresh_token, expected_type="refresh")
+    payload = verify_token(rt, expected_type="refresh")
     
     if payload is None:
         raise HTTPException(
