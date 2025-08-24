@@ -818,7 +818,7 @@ async def voice_chat(
             )
 
             base_max_tokens = 800
-            max_tokens = int(base_max_tokens * 0.25)
+            max_tokens = int(base_max_tokens * 0.20)
 
             # Sentence buffering
             buffer = ""
