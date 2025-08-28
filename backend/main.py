@@ -1206,8 +1206,27 @@ async def list_conversation_turns(conversation_id: UUID, limit: int = 50, offset
         if conversation.user_id != current_user.id:
             raise HTTPException(status_code=403, detail="Forbidden: conversation does not belong to user")
 
-        turns = (
-            db.query(ConversationTurn)
+        def to_iso(value: Any) -> Optional[str]:
+            try:
+                if value is None:
+                    return None
+                if isinstance(value, (datetime, date)):
+                    return value.isoformat()
+                return str(value)
+            except Exception:
+                return None
+
+        # Select only stable columns to support older DBs without the attachments column
+        rows = (
+            db.query(
+                ConversationTurn.id,
+                ConversationTurn.turn_number,
+                ConversationTurn.user_input,
+                ConversationTurn.ai_response,
+                ConversationTurn.timestamp,
+                ConversationTurn.comprehension_score,
+                ConversationTurn.comprehension_notes,
+            )
             .filter(ConversationTurn.conversation_id == conversation_id)
             .order_by(ConversationTurn.turn_number.asc())
             .limit(limit)
@@ -1215,19 +1234,21 @@ async def list_conversation_turns(conversation_id: UUID, limit: int = 50, offset
             .all()
         )
 
-        return [
-            ConversationTurnResponse(
-                id=t.id,
-                turn_number=t.turn_number,
-                user_input=t.user_input,
-                ai_response=t.ai_response,
-                timestamp=t.timestamp.isoformat() if t.timestamp else None,
-                comprehension_score=t.comprehension_score,
-                comprehension_notes=t.comprehension_notes,
-                attachments=getattr(t, 'attachments', None)
-            )
-            for t in turns
-        ]
+        results: List[ConversationTurnResponse] = []
+        for r in rows:
+            # r is a Row/tuple in the order specified above
+            (rid, rturn, ruser, rai, rts, rscore, rnotes) = r
+            results.append(ConversationTurnResponse(
+                id=rid,
+                turn_number=rturn,
+                user_input=ruser,
+                ai_response=rai,
+                timestamp=to_iso(rts),
+                comprehension_score=rscore,
+                comprehension_notes=rnotes,
+                attachments=None
+            ))
+        return results
     except HTTPException:
         raise
     except Exception as e:
