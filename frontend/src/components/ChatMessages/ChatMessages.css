@@ -201,7 +201,7 @@
 .assistant-block__actions {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: 6px;
+  margin-top: 8px;
 }
 
 .copy-response-btn {

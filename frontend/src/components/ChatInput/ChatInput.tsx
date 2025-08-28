@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MicrophoneIcon, SendIcon } from '../Icons';
 import './ChatInput.css';
 
@@ -51,6 +51,24 @@ const ChatInput: React.FC<ChatInputProps> = ({
     if (next.length) setLocalAttachments(prev => [...prev, ...next]);
   };
 
+  const revokeObjectURLIfBlob = (url: string) => {
+    if (typeof url === 'string' && url.startsWith('blob:')) {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const removeAttachment = (id: string) => {
+    setLocalAttachments(prev => {
+      const toRemove = prev.find(att => att.id === id);
+      if (toRemove?.url) revokeObjectURLIfBlob(toRemove.url);
+      return prev.filter(att => att.id !== id);
+    });
+  };
+
   const handlePaste: React.ClipboardEventHandler<HTMLTextAreaElement> = (e) => {
     const files = e.clipboardData?.files;
     if (files && files.length > 0) {
@@ -85,6 +103,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
     const trimmedMessage = inputValue.trim();
     if (trimmedMessage && !isLoading) {
       onSendMessage(trimmedMessage, localAttachments);
+      // Cleanup previews
+      localAttachments.forEach(att => revokeObjectURLIfBlob(att.url));
       setInputValue('');
       setLocalAttachments([]);
     }
@@ -93,6 +113,14 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputValue(e.target.value);
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      localAttachments.forEach(att => revokeObjectURLIfBlob(att.url));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleVoiceActivate = () => {
     if (isInCooldown) {
@@ -109,16 +137,37 @@ const ChatInput: React.FC<ChatInputProps> = ({
   return (
     <div className="input-container">
       <div className="input-wrapper" onDrop={handleDrop} onDragOver={handleDragOver}>
-        <textarea
-          value={inputValue}
-          onChange={handleInputChange}
-          onKeyPress={handleKeyPress}
-          onPaste={handlePaste}
-          placeholder="Type your message here... (or click mic to start voice input)"
-          disabled={isLoading}
-          rows={1}
-          className="message-input"
-        />
+        <div className="input-left">
+          {/* Thumbnails above the textarea */}
+          {localAttachments.length > 0 && (
+            <div className="attachments" aria-label="Image attachments">
+              {localAttachments.map(att => (
+                <div key={att.id} className="attachment">
+                  <img src={att.url} alt={att.alt || ''} />
+                  <button
+                    type="button"
+                    className="remove-attachment"
+                    aria-label="Remove image"
+                    onClick={() => removeAttachment(att.id)}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <textarea
+            value={inputValue}
+            onChange={handleInputChange}
+            onKeyPress={handleKeyPress}
+            onPaste={handlePaste}
+            placeholder="Type your message here... (or click mic to start voice input)"
+            disabled={isLoading}
+            rows={1}
+            className="message-input"
+          />
+        </div>
 
         {/* Hidden file input */}
         <input
@@ -129,17 +178,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
           style={{ display: 'none' }}
           onChange={(e) => handleFiles(e.target.files)}
         />
-
-        {/* Thumbnails */}
-        {localAttachments.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginRight: '6px' }}>
-            {localAttachments.map(att => (
-              <div key={att.id} style={{ position: 'relative' }}>
-                <img src={att.url} alt={att.alt || ''} style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', border: '1px solid var(--border-subtle)' }} />
-              </div>
-            ))}
-          </div>
-        )}
         
         {/* Voice Input Button */}
         {isSpeechRecognitionSupported && (

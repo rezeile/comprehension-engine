@@ -37,13 +37,18 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({ messages, isLoading }) => {
   return (
     <div className="messages-container">
       <div className="messages-column">
-        {messages.map((message) => (
+        {messages.map((message, idx) => (
           <div
             key={message.id}
             className={`message ${message.sender === 'user' ? 'user-message' : 'assistant-message'}`}
           >
             {message.sender === 'assistant' ? (
-              <AssistantBlock content={message.content} timestamp={message.timestamp} attachments={message.attachments} />
+              <AssistantBlock 
+                content={message.content} 
+                timestamp={message.timestamp} 
+                attachments={message.attachments}
+                hideCopy={idx === 0}
+              />
             ) : (
               <UserChip content={message.content} timestamp={message.timestamp} attachments={message.attachments} />
             )}

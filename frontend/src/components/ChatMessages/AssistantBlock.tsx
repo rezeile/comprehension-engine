@@ -16,9 +16,10 @@ interface AssistantBlockProps {
   content: string;
   timestamp: Date;
   attachments?: Attachment[];
+  hideCopy?: boolean;
 }
 
-const AssistantBlock: React.FC<AssistantBlockProps> = ({ content, attachments, timestamp: _timestamp }) => {
+const AssistantBlock: React.FC<AssistantBlockProps> = ({ content, attachments, timestamp: _timestamp, hideCopy = false }) => {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -48,17 +49,6 @@ const AssistantBlock: React.FC<AssistantBlockProps> = ({ content, attachments, t
   };
   return (
     <div className="assistant-block">
-      <div className="assistant-block__actions">
-        <button
-          type="button"
-          className={`copy-response-btn ${copied ? 'copied' : ''}`}
-          aria-label={copied ? 'Copied' : 'Copy response'}
-          title={copied ? 'Copied!' : 'Copy response'}
-          onClick={handleCopy}
-        >
-          {copied ? <CheckIcon width={16} height={16} /> : <CopyIcon width={16} height={16} />}
-        </button>
-      </div>
       <div className="assistant-block__content">
         <FormattedMessage content={content} className="assistant" variant="lecture" />
         {attachments && attachments.length > 0 && (
@@ -71,6 +61,19 @@ const AssistantBlock: React.FC<AssistantBlockProps> = ({ content, attachments, t
           </div>
         )}
       </div>
+      {!hideCopy && (
+        <div className="assistant-block__actions">
+          <button
+            type="button"
+            className={`copy-response-btn ${copied ? 'copied' : ''}`}
+            aria-label={copied ? 'Copied' : 'Copy response'}
+            title={copied ? 'Copied!' : 'Copy response'}
+            onClick={handleCopy}
+          >
+            {copied ? <CheckIcon width={16} height={16} /> : <CopyIcon width={16} height={16} />}
+          </button>
+        </div>
+      )}
       {lightboxUrl && (
         <div role="dialog" aria-modal="true" onClick={() => setLightboxUrl(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <img src={lightboxUrl} alt="attachment" style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 8, boxShadow: '0 10px 40px rgba(0,0,0,0.6)' }} />

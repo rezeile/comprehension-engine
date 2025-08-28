@@ -23,6 +23,57 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
+.input-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+/* Attachments Row */
+.attachments {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 6px;
+  max-width: 40vw;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.attachment {
+  position: relative;
+  width: 144px; /* 20% smaller than 180px */
+  height: 144px;
+  border-radius: 6px;
+  overflow: hidden;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-subtle);
+}
+
+.attachment img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.remove-attachment {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.7);
+  color: #fff;
+  border: none;
+  padding: 0;
+  line-height: 22px;
+  text-align: center;
+  cursor: pointer;
+}
+
 .message-input {
   flex: 1;
   border: none;
@@ -205,6 +256,8 @@
     width: 36px;
     height: 36px;
   }
+  .attachments { max-width: 55vw; }
+  .attachment { width: 120px; height: 120px; }
 }
 
 @media (max-width: 480px) {
@@ -227,6 +280,8 @@
     width: 32px;
     height: 32px;
   }
+  .attachments { max-width: 65vw; }
+  .attachment { width: 110px; height: 110px; }
   
   .permission-warning {
     margin-top: 0.4rem;
