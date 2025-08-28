@@ -16,6 +16,7 @@ interface VoiceModeProps {
   onSendMessage: () => void;
   overlay?: boolean;
   contextMessages?: Message[];
+  
 }
 
 const VoiceMode: React.FC<VoiceModeProps> = ({
@@ -26,7 +27,8 @@ const VoiceMode: React.FC<VoiceModeProps> = ({
   onExit,
   onSendMessage,
   overlay = false,
-  contextMessages = []
+  contextMessages = [],
+  
 }) => {
   return (
     <div className={`voice-mode-interface${overlay ? ' voice-overlay' : ''}`}>

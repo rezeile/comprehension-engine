@@ -198,6 +198,38 @@
   padding: 0;
 }
 
+.assistant-block__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+
+.copy-response-btn {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  border-radius: 8px;
+  padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.08s ease, border-color 0.15s ease;
+}
+
+.copy-response-btn:hover {
+  background: var(--inline-code-bg);
+}
+
+.copy-response-btn:active {
+  transform: translateY(1px);
+}
+
+.copy-response-btn.copied {
+  border-color: rgba(16, 185, 129, 0.6);
+  background: rgba(16, 185, 129, 0.08);
+}
+
 /* Slightly narrower and lightweight user contribution in centered layout */
 .messages-column .user-chip {
   display: inline-block; /* content-hugging */

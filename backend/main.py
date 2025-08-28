@@ -8,7 +8,8 @@ try:
 except ImportError:
     ProxyHeadersMiddleware = None  # Optional; skip if unavailable
 from pydantic import BaseModel
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Dict, Any
+from datetime import datetime, date
 from uuid import UUID
 import anthropic
 import os
@@ -19,6 +20,14 @@ import httpx
 from sqlalchemy.orm import Session
 from time import perf_counter
 import re
+try:
+    import boto3  # type: ignore
+    from botocore.client import Config as BotoConfig  # type: ignore
+    BOTO3_AVAILABLE = True
+except Exception:
+    boto3 = None  # type: ignore
+    BotoConfig = None  # type: ignore
+    BOTO3_AVAILABLE = False
 
 # Import our new prompt management system
 from prompts import prompt_manager
@@ -83,6 +92,71 @@ app.add_middleware(
 
 # Include routes
 app.include_router(auth_router)
+
+# ---- Upload presign endpoint ----
+class PresignRequest(BaseModel):
+    content_type: str
+    file_name: Optional[str] = None
+    max_size: Optional[int] = 10 * 1024 * 1024  # 10 MB default
+
+class PresignResponse(BaseModel):
+    upload_url: str
+    file_url: str
+    method: str = "PUT"
+    fields: Optional[Dict[str, Any]] = None
+
+def _create_s3_client():
+    if not BOTO3_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Storage not configured: boto3 is not installed")
+    region = os.getenv("S3_REGION", "us-east-1")
+    access_key = os.getenv("S3_ACCESS_KEY_ID")
+    secret_key = os.getenv("S3_SECRET_ACCESS_KEY")
+    use_accel = os.getenv("S3_USE_ACCELERATE", "false").lower() == "true"
+    session = boto3.session.Session()
+    return session.client(
+        "s3",
+        region_name=region,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        config=BotoConfig(s3={"use_accelerate_endpoint": use_accel})
+    )
+
+@app.post("/api/uploads/presign", response_model=PresignResponse)
+async def presign_upload(req: PresignRequest, current_user: User = Depends(get_current_user)):
+    if not BOTO3_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Storage not configured: install boto3 on the server")
+    # Basic validation
+    allowed_types = {"image/png", "image/jpeg", "image/webp", "image/heic"}
+    if req.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Unsupported content type")
+    if (req.max_size or 0) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large")
+
+    bucket = os.getenv("S3_BUCKET_NAME")
+    if not bucket:
+        raise HTTPException(status_code=500, detail="Storage bucket not configured")
+
+    key_prefix = f"uploads/{current_user.id}/"
+    file_name = req.file_name or "upload"
+    # Avoid path traversal
+    safe_name = "".join(ch for ch in file_name if ch.isalnum() or ch in (".", "-", "_")) or "upload"
+    key = key_prefix + safe_name
+
+    ttl = int(os.getenv("S3_PRESIGN_TTL_SECONDS", "300"))
+    s3 = _create_s3_client()
+    try:
+        upload_url = s3.generate_presigned_url(
+            ClientMethod="put_object",
+            Params={"Bucket": bucket, "Key": key, "ContentType": req.content_type},
+            ExpiresIn=ttl
+        )
+        # Public URL assumption: bucket has public read or CloudFront in front. Adjust as needed.
+        region = os.getenv("S3_REGION", "us-east-1")
+        file_url = f"https://{bucket}.s3.{region}.amazonaws.com/{key}"
+        return PresignResponse(upload_url=upload_url, file_url=file_url, method="PUT")
+    except Exception as e:
+        print(f"presign failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create presigned URL")
 
 # Initialize Anthropic client with persistent HTTP/2 session (keep-alive)
 api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -190,6 +264,8 @@ class ChatRequest(BaseModel):
     start_new: Optional[bool] = False
     # New: mode awareness for prompt composition
     mode: Optional[Literal["text", "voice"]] = None
+    # Optional: image attachments uploaded via presign flow
+    attachments: Optional[List[Dict[str, Any]]] = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -219,6 +295,7 @@ class ConversationTurnResponse(BaseModel):
     timestamp: Optional[str] = None
     comprehension_score: Optional[int] = None
     comprehension_notes: Optional[str] = None
+    attachments: Optional[List[Dict[str, Any]]] = None
 
     class Config:
         from_attributes = True
@@ -412,8 +489,23 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user
                     elif msg.get("role") == "assistant":
                         messages.append({"role": "assistant", "content": msg["content"]})
 
-        # Add current user message
-        messages.append({"role": "user", "content": request.message})
+        # Add current user message (mention attachments if present for LLM context)
+        user_text = request.message
+        if request.attachments:
+            try:
+                mention_lines = []
+                for a in request.attachments[:4]:
+                    if not isinstance(a, dict):
+                        continue
+                    url = a.get("url")
+                    alt = a.get("alt") or "image"
+                    if url:
+                        mention_lines.append(f"Attached image: {url} (alt: {alt})")
+                if mention_lines:
+                    user_text = user_text + "\n\n" + "\n".join(mention_lines)
+            except Exception:
+                pass
+        messages.append({"role": "user", "content": user_text})
         
         # Get system prompt from prompt manager with task/mode composition
         system_prompt = prompt_manager.get_prompt(task="chat", mode=request.mode or "text")
@@ -524,6 +616,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user
                     ai_response=ai_response,
                     response_time_ms=elapsed_ms,
                     voice_used=None,
+                    attachments=request.attachments if request.attachments else None,
                 )
                 db.add(turn)
                 db.commit()
@@ -988,6 +1081,17 @@ async def list_conversations(limit: int = 20, offset: int = 0, db: Session = Dep
     try:
         from database.models import Conversation, ConversationTurn
 
+        def to_iso(value: Any) -> Optional[str]:
+            try:
+                if value is None:
+                    return None
+                if isinstance(value, (datetime, date)):
+                    return value.isoformat()
+                # Some drivers may already return ISO strings
+                return str(value)
+            except Exception:
+                return None
+
         conversations = (
             db.query(Conversation)
             .filter(Conversation.user_id == current_user.id)
@@ -1000,14 +1104,16 @@ async def list_conversations(limit: int = 20, offset: int = 0, db: Session = Dep
         # Compute last_turn_at and turn_count for each conversation
         summaries: List[ConversationSummary] = []
         for c in conversations:
-            last_turn = (
-                db.query(ConversationTurn)
+            # Select only needed columns to maintain compatibility with pre-attachments schema
+            ts_row = (
+                db.query(ConversationTurn.timestamp)
                 .filter(ConversationTurn.conversation_id == c.id)
                 .order_by(ConversationTurn.timestamp.desc())
                 .first()
             )
+            last_ts = ts_row[0] if (isinstance(ts_row, tuple) or isinstance(ts_row, list)) else ts_row
             turn_count = (
-                db.query(ConversationTurn)
+                db.query(ConversationTurn.id)
                 .filter(ConversationTurn.conversation_id == c.id)
                 .count()
             )
@@ -1015,10 +1121,10 @@ async def list_conversations(limit: int = 20, offset: int = 0, db: Session = Dep
                 id=c.id,
                 title=c.title,
                 topic=c.topic,
-                created_at=c.created_at.isoformat() if c.created_at else None,
-                updated_at=c.updated_at.isoformat() if c.updated_at else None,
+                created_at=to_iso(c.created_at),
+                updated_at=to_iso(c.updated_at),
                 is_active=c.is_active,
-                last_turn_at=last_turn.timestamp.isoformat() if last_turn and last_turn.timestamp else None,
+                last_turn_at=to_iso(last_ts),
                 turn_count=turn_count
             ))
         return summaries
@@ -1117,7 +1223,8 @@ async def list_conversation_turns(conversation_id: UUID, limit: int = 50, offset
                 ai_response=t.ai_response,
                 timestamp=t.timestamp.isoformat() if t.timestamp else None,
                 comprehension_score=t.comprehension_score,
-                comprehension_notes=t.comprehension_notes
+                comprehension_notes=t.comprehension_notes,
+                attachments=getattr(t, 'attachments', None)
             )
             for t in turns
         ]

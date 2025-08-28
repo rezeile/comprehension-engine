@@ -16,12 +16,12 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
   isSpeechRecognitionSupported,
   onHistoryToggle
 }) => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   return (
     <div className="chat-header">
       <h1>GraspWell</h1>
-      <p>Your AI-Powered Learning Assistant</p>
+      <p>Your learning companion</p>
       
       {/* Left controls (settings & notices) */}
       <div className="voice-controls-header">
@@ -58,13 +58,11 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
       </div>
 
       {/* Right controls (user info) */}
-      <div className="user-controls-header">
+      {/* <div className="user-controls-header">
         <div className="user-section">
-          <span className="user-info">
-            {user?.name || user?.email}
-          </span>
+          <img src="@1024.png" alt="User avatar" className="user-avatar" />
         </div>
-      </div>
+      </div> */}
     </div>
   );
 };

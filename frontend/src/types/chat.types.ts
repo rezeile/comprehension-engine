@@ -1,10 +1,20 @@
 // Chat-related interfaces and types for the chat system
 
+export interface Attachment {
+  id: string;
+  type: 'image';
+  url: string;
+  width?: number;
+  height?: number;
+  alt?: string;
+}
+
 export interface Message {
   id: string;
   content: string;
   sender: 'user' | 'assistant';
   timestamp: Date;
+  attachments?: Attachment[];
 }
 
 export interface ChatRequest {
@@ -15,6 +25,7 @@ export interface ChatRequest {
   }>;
   conversation_id?: string;
   start_new?: boolean;
+  attachments?: Attachment[];
 }
 
 export interface ChatResponse {

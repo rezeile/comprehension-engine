@@ -1,6 +1,18 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Message, ChatRequest, ChatResponse, ChatState, ChatOptions, SendMessageOptions } from '../types/chat.types';
+import { Message, ChatRequest, ChatResponse, ChatState, ChatOptions, SendMessageOptions, Attachment } from '../types/chat.types';
 import { ConversationTurn } from '../types/conversation.types';
+import { useAuth } from '../context/AuthContext';
+
+// Extract first name using regex (grab text before the first space)
+const extractFirstName = (fullName?: string): string => {
+  if (!fullName) return 'there';
+  const match = fullName.trim().match(/^([^\s]+)/);
+  return match?.[1] || 'there';
+};
+
+const buildWelcome = (firstName: string): string => {
+  return `Hey ${firstName} what's on your mind?`;
+};
 
 export const useChat = (options: ChatOptions = {}) => {
   const {
@@ -15,12 +27,14 @@ export const useChat = (options: ChatOptions = {}) => {
     onStreamDone,
   } = options;
 
+  const { user } = useAuth();
+
   // State management
   const [state, setState] = useState<ChatState>({
     messages: [
       {
         id: '1',
-        content: 'Hello! I\'m your AI tutor. How can I help you learn today?',
+        content: buildWelcome(extractFirstName(user?.name)),
         sender: 'assistant',
         timestamp: new Date()
       }
@@ -42,8 +56,23 @@ export const useChat = (options: ChatOptions = {}) => {
     scrollToBottom();
   }, [state.messages, scrollToBottom]);
 
+  // Update welcome message when user information becomes available or changes
+  useEffect(() => {
+    const firstName = extractFirstName(user?.name);
+    setState(prev => {
+      if (prev.messages.length >= 1 && prev.messages[0].id === '1' && prev.messages[0].sender === 'assistant') {
+        const newContent = buildWelcome(firstName);
+        if (prev.messages[0].content !== newContent) {
+          const updatedFirst = { ...prev.messages[0], content: newContent };
+          return { ...prev, messages: [updatedFirst, ...prev.messages.slice(1)] };
+        }
+      }
+      return prev;
+    });
+  }, [user]);
+
   // Send message to backend
-  const sendMessageToBackend = useCallback(async (message: string): Promise<{ ai: string; conversationId?: string }> => {
+  const sendMessageToBackend = useCallback(async (message: string, attachments?: Attachment[]): Promise<{ ai: string; conversationId?: string }> => {
     try {
       // Prepare conversation history for the API
       const conversationHistory = state.messages.slice(1).map(msg => ({
@@ -59,6 +88,7 @@ export const useChat = (options: ChatOptions = {}) => {
             ? { conversation_id: conversationId }
             : { start_new: true }
         ),
+        ...(attachments && attachments.length > 0 ? { attachments } : {}),
       };
 
       const accessToken = localStorage.getItem('access_token');
@@ -86,14 +116,15 @@ export const useChat = (options: ChatOptions = {}) => {
   }, [state.messages, backendUrl, conversationId]);
 
   // Send a message
-  const sendMessage = useCallback(async (content: string, sender: 'user' | 'assistant' = 'user'): Promise<string | undefined> => {
+  const sendMessage = useCallback(async (content: string, sender: 'user' | 'assistant' = 'user', attachments?: Attachment[]): Promise<string | undefined> => {
     if (!content.trim()) return;
 
     const message: Message = {
       id: Date.now().toString(),
       content: content.trim(),
       sender,
-      timestamp: new Date()
+      timestamp: new Date(),
+      ...(attachments && attachments.length > 0 ? { attachments } : {}),
     };
 
     // Add user message immediately
@@ -110,7 +141,7 @@ export const useChat = (options: ChatOptions = {}) => {
       setState(prev => ({ ...prev, isLoading: true }));
 
       try {
-        const { ai: aiResponse, conversationId: returnedConversationId } = await sendMessageToBackend(message.content);
+        const { ai: aiResponse, conversationId: returnedConversationId } = await sendMessageToBackend(message.content, attachments);
         
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
@@ -353,21 +384,21 @@ export const useChat = (options: ChatOptions = {}) => {
       messages: [
         {
           id: '1',
-          content: 'Hello! I\'m your AI tutor. How can I help you learn today?',
+          content: buildWelcome(extractFirstName(user?.name)),
           sender: 'assistant',
           timestamp: new Date()
         }
       ],
       error: null
     }));
-  }, []);
+  }, [user]);
 
   // Hydrate messages from a list of conversation turns
   const hydrateFromTurns = useCallback((turns: ConversationTurn[]) => {
     const hydrated: Message[] = [
       {
         id: '1',
-        content: 'Hello! I\'m your AI tutor. How can I help you learn today?',
+        content: buildWelcome(extractFirstName(user?.name)),
         sender: 'assistant',
         timestamp: new Date()
       }
@@ -377,7 +408,8 @@ export const useChat = (options: ChatOptions = {}) => {
         id: `${t.id}-u`,
         content: t.user_input,
         sender: 'user',
-        timestamp: t.timestamp ? new Date(t.timestamp) : new Date()
+        timestamp: t.timestamp ? new Date(t.timestamp) : new Date(),
+        ...(t.attachments ? { attachments: t.attachments as any } : {}),
       });
       hydrated.push({
         id: `${t.id}-a`,
@@ -387,7 +419,7 @@ export const useChat = (options: ChatOptions = {}) => {
       });
     }
     setState(prev => ({ ...prev, messages: hydrated, error: null }));
-  }, []);
+  }, [user]);
 
   // Clear error
   const clearError = useCallback(() => {

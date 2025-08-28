@@ -173,6 +173,55 @@ export const HistoryIcon: React.FC<IconProps> = ({
   </svg>
 );
 
+ 
+
+// Copy icon for assistant message copy-to-clipboard
+export const CopyIcon: React.FC<IconProps> = ({
+  width = 18,
+  height = 18,
+  className = '',
+  stroke = 'currentColor'
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    width={width}
+    height={height}
+    className={className}
+    fill="none"
+    stroke={stroke}
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </svg>
+);
+
+// Small check icon for success feedback
+export const CheckIcon: React.FC<IconProps> = ({
+  width = 18,
+  height = 18,
+  className = '',
+  stroke = 'currentColor'
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    width={width}
+    height={height}
+    className={className}
+    fill="none"
+    stroke={stroke}
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M20 6L9 17l-5-5" />
+  </svg>
+);
+
 // Export all icons as a default object for convenience
 export const Icons = {
   Microphone: MicrophoneIcon,
@@ -183,6 +232,8 @@ export const Icons = {
   Settings: SettingsIcon,
   History: HistoryIcon,
   Plus: PlusIcon,
+  Copy: CopyIcon,
+  Check: CheckIcon,
 };
 
 export default Icons;

@@ -17,6 +17,7 @@ export interface ConversationTurn {
   timestamp?: string | null;
   comprehension_score?: number | null;
   comprehension_notes?: string | null;
+  attachments?: any;
 }
 
 

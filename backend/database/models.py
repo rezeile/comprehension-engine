@@ -85,6 +85,8 @@ class ConversationTurn(Base):
     voice_used = Column(String(100), nullable=True)  # Which ElevenLabs voice was used
     timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     extra_data = Column(JSON, nullable=True)  # Flexible field for additional data
+    # Attachments associated with the user turn (images, etc.)
+    attachments = Column(JSON, nullable=True)  # Array of attachment metadata dicts
     
     # Relationships
     conversation = relationship("Conversation", back_populates="turns")

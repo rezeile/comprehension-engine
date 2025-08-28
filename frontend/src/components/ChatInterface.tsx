@@ -200,6 +200,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
     onStart: () => {
       // Handle speech start - now we can reset the sending state
       setIsSendingMessage(false);
+      // Clear the awaiting flag so STT can resume after TTS ends
+      awaitingSpeechStartRef.current = false;
     },
     onEnd: () => {
       // Handle speech end and try to drain next buffered sentence
@@ -313,7 +315,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
 
   // History drawer state
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
-  const { conversations, isLoading: isHistoryLoading, hasMore, loadMore, renameConversation, refreshList } = useConversations();
+  
+  const { conversations, isLoading: isHistoryLoading, error: historyError, hasMore, loadMore, renameConversation, refreshList } = useConversations();
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -460,7 +463,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
   };
 
   // Modified send message to handle both voice and text input
-  const handleSendMessage = async (messageText?: string) => {
+  const handleSendMessage = async (messageText?: string, attachments?: any[]) => {
     
     let messageToSend = '';
     
@@ -506,9 +509,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
           returnedConversationId = await streamVoiceChat(messageToSend, history, selectedVoice, undefined, conversationId);
         } catch (e) {
           console.error('voice_chat stream failed', e);
+          // If streaming fails, clear awaiting flag so STT can resume
+          awaitingSpeechStartRef.current = false;
         }
       } else {
-        returnedConversationId = await sendMessage(messageToSend);
+        returnedConversationId = await sendMessage(messageToSend, 'user', attachments || []);
       }
       // If backend returned a conversation id and route doesn't match, navigate
       if (returnedConversationId && returnedConversationId !== conversationId) {
@@ -568,6 +573,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
           isOpen={isHistoryOpen}
           conversations={conversations}
           isLoading={isHistoryLoading}
+          error={historyError}
           onClose={() => setIsHistoryOpen(false)}
           onLoadMore={loadMore}
           hasMore={hasMore}
@@ -615,6 +621,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
           voiceEnabled={voiceState.voiceEnabled}
           onVoiceToggle={toggleVoiceOutput}
         />
+        
       </div>
 
       {/* Overlay Voice Mode */}

@@ -4,11 +4,21 @@ import AssistantBlock from './AssistantBlock';
 import UserChip from './UserChip';
 import './ChatMessages.css';
 
+type Attachment = {
+  id: string;
+  type: 'image';
+  url: string;
+  width?: number;
+  height?: number;
+  alt?: string;
+};
+
 interface Message {
   id: string;
   content: string;
   sender: 'user' | 'assistant';
   timestamp: Date;
+  attachments?: Attachment[];
 }
 
 interface ChatMessagesProps {
@@ -33,9 +43,9 @@ const ChatMessages: React.FC<ChatMessagesProps> = ({ messages, isLoading }) => {
             className={`message ${message.sender === 'user' ? 'user-message' : 'assistant-message'}`}
           >
             {message.sender === 'assistant' ? (
-              <AssistantBlock content={message.content} timestamp={message.timestamp} />
+              <AssistantBlock content={message.content} timestamp={message.timestamp} attachments={message.attachments} />
             ) : (
-              <UserChip content={message.content} timestamp={message.timestamp} />
+              <UserChip content={message.content} timestamp={message.timestamp} attachments={message.attachments} />
             )}
           </div>
         ))}

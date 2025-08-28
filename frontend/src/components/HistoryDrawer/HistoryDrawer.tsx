@@ -7,6 +7,7 @@ interface HistoryDrawerProps {
   isOpen: boolean;
   conversations: ConversationSummary[];
   isLoading: boolean;
+  error?: string | null;
   onClose: () => void;
   onLoadMore: () => void;
   hasMore: boolean;
@@ -20,6 +21,7 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
   isOpen,
   conversations,
   isLoading,
+  error,
   onClose,
   onLoadMore,
   hasMore,
@@ -48,6 +50,9 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
   return (
     <SlidePanel isOpen={isOpen} onClose={onClose} title="History" id="history-drawer">
       <div className="history-content" role="list">
+        {error && (
+          <div className="history-loading" role="alert">{error}</div>
+        )}
         {conversations.map(c => (
           <div key={c.id} role="listitem" className="history-item">
             {editingId === c.id ? (

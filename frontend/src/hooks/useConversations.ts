@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { ConversationSummary } from '../types/conversation.types';
 import { ConversationService } from '../services/ConversationService';
 
@@ -12,6 +13,7 @@ interface UseConversationsState {
 
 export const useConversations = () => {
   const conversationService = useMemo(() => new ConversationService(), []);
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const [state, setState] = useState<UseConversationsState>({
     conversations: [],
     isLoading: false,
@@ -39,8 +41,11 @@ export const useConversations = () => {
   }, [conversationService]);
 
   useEffect(() => {
-    loadPage(0);
-  }, [loadPage]);
+    // Only attempt to load when auth is ready and user is authenticated
+    if (!isAuthLoading && isAuthenticated) {
+      loadPage(0);
+    }
+  }, [isAuthLoading, isAuthenticated, loadPage]);
 
   const refreshList = useCallback(async () => {
     await loadPage(0);

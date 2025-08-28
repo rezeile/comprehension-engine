@@ -41,6 +41,8 @@ const VoiceModeControls: React.FC<VoiceModeControlsProps> = ({
       >
         <SendIcon width={24} height={24} />
       </button>
+
+      
     </div>
   );
 };

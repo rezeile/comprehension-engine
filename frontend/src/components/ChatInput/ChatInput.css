@@ -83,6 +83,46 @@
   cursor: not-allowed;
 }
 
+.pick-files-button {
+  background: linear-gradient(90deg, #ecec07 0%, #FFD700 0%);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+}
+
+.pick-files-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #ccc;
+}
+
+.pick-files-button:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(194, 189, 13, 0.4);
+}
+
+.pick-files-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #ccc;
+}
+
+.pick-files-button.uploading {
+  background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+  animation: uploading-pulse 1.5s infinite;
+}
+
+.pick-files-button.uploading:hover {
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.4);
+}
+
+.pick-files-button.processing {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
 /* Send Button */
 .send-button {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -108,6 +148,7 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
 
 /* Permission Warning */
 .permission-warning {
