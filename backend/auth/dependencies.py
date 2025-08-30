@@ -6,6 +6,7 @@ routes and get current user information.
 """
 
 from typing import Optional
+import os
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Request
@@ -126,3 +127,20 @@ async def get_optional_current_user(
         
     except Exception:
         return None
+
+
+def user_is_admin(user: User) -> bool:
+    """
+    Determine if a user has admin privileges.
+
+    A user is considered admin if their email appears in the comma-separated
+    ADMIN_EMAILS environment variable. Comparisons are case-insensitive.
+    """
+    try:
+        allow = os.getenv("ADMIN_EMAILS", "")
+        if not allow or not user or not getattr(user, "email", None):
+            return False
+        allowed = {e.strip().lower() for e in allow.split(",") if e.strip()}
+        return user.email.lower() in allowed
+    except Exception:
+        return False

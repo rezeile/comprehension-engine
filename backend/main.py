@@ -43,7 +43,7 @@ from services import PromptService
 
 # Import API routes
 from api.auth_routes import router as auth_router
-from auth.dependencies import get_current_user
+from auth.dependencies import get_current_user, user_is_admin
 
 # ElevenLabs imports
 try:
@@ -497,11 +497,11 @@ async def text_to_speech(request: TTSRequest):
 async def analyze_learning(req: AnalyzeRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not app_settings.adaptive_learning_enabled:
         raise HTTPException(status_code=403, detail="Adaptive learning is disabled")
-    # Ownership check
+    # Ownership check (admin bypass)
     convo = db.query(Conversation).filter(Conversation.id == req.conversation_id).first()
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    if convo.user_id != current_user.id:
+    if convo.user_id != current_user.id and not user_is_admin(current_user):
         raise HTTPException(status_code=403, detail="Forbidden: conversation does not belong to user")
 
     svc = LearningAnalysisService(db)
@@ -559,8 +559,11 @@ async def update_prompt(req: UpdatePromptRequest, db: Session = Depends(get_db),
     convo = db.query(Conversation).filter(Conversation.id == analysis.conversation_id).first()
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found for analysis")
-    if convo.user_id != current_user.id and req.scope != "global":
-        # Allow only owner to request user/conversation updates; global could be admin in future
+    # Allow owner or admin to update user/conversation; restrict global to admin only
+    is_admin = user_is_admin(current_user)
+    if req.scope == "global" and not is_admin:
+        raise HTTPException(status_code=403, detail="Admin required for global prompt updates")
+    if convo.user_id != current_user.id and not is_admin:
         raise HTTPException(status_code=403, detail="Forbidden: analysis does not belong to user")
 
     # Base prompt: resolve current effective prompt for context
@@ -576,6 +579,18 @@ async def update_prompt(req: UpdatePromptRequest, db: Session = Depends(get_db),
             "Add end-of-voice-turn question rule",
         ],
     }
+    try:
+        # Factor in new signals from analysis features to make adaptation observable in tests
+        feats = analysis.features or {}
+        if isinstance(feats, dict):
+            prefs = feats.get("preferred_explanations") or []
+            if isinstance(prefs, list) and prefs:
+                improved["improved_prompt"] += "\n\n# Preference: " + ", ".join([str(p) for p in prefs]) + "."
+            patterns = feats.get("learning_style_patterns") or []
+            if isinstance(patterns, list) and ("compact_chunks" in patterns):
+                improved["improved_prompt"] += "\n# Style: Use compact chunks."
+    except Exception:
+        pass
 
     prompt_row = {
         "name": f"adaptive_{req.scope}_v1",
@@ -583,8 +598,10 @@ async def update_prompt(req: UpdatePromptRequest, db: Session = Depends(get_db),
         "content": improved["improved_prompt"],
         "metadata": {
             "analysis_id": str(analysis.id),
+            "summary": f"Prompt updated based on analysis {analysis.id}",
             "rationale": improved["rationale"],
             "diff_bullets": improved["diff_bullets"],
+            "source_analysis_features": analysis.features,
         },
         "scope": req.scope,
     }
@@ -602,11 +619,46 @@ async def update_prompt(req: UpdatePromptRequest, db: Session = Depends(get_db),
 
     # Commit path: insert prompt and assignment
     psvc = PromptService(db)
+    # Derive parent_prompt_id from current effective assignment, if any
+    parent_id = None
+    try:
+        # Reuse internal resolver to find the current prompt row for lineage
+        from database.models import PromptAssignment, Prompt
+        if req.scope == "conversation":
+            pa = (
+                db.query(PromptAssignment)
+                .filter(PromptAssignment.scope == "conversation", PromptAssignment.conversation_id == convo.id)
+                .order_by(PromptAssignment.effective_at.desc())
+                .first()
+            )
+        elif req.scope == "user":
+            pa = (
+                db.query(PromptAssignment)
+                .filter(PromptAssignment.scope == "user", PromptAssignment.user_id == convo.user_id)
+                .order_by(PromptAssignment.effective_at.desc())
+                .first()
+            )
+        else:
+            pa = (
+                db.query(PromptAssignment)
+                .filter(PromptAssignment.scope == "global")
+                .order_by(PromptAssignment.effective_at.desc())
+                .first()
+            )
+        if pa:
+            parent_prompt = db.query(Prompt).filter(Prompt.id == pa.prompt_id).first()
+            if parent_prompt:
+                parent_id = parent_prompt.id
+    except Exception:
+        parent_id = None
+
     created = psvc.create_prompt(
         name=prompt_row["name"],
         content=prompt_row["content"],
         scope=req.scope,
-        metadata=prompt_row["metadata"],
+        metadata={**prompt_row["metadata"], **({"parent_prompt_id": str(parent_id)} if parent_id else {})},
+        parent_prompt_id=parent_id,
+        created_by=getattr(current_user, "id", None),
         is_active=True,
     )
     # Determine assignment target
@@ -617,6 +669,19 @@ async def update_prompt(req: UpdatePromptRequest, db: Session = Depends(get_db),
         assign_kwargs["conversation_id"] = analysis.conversation_id if not req.target_id else req.target_id
     # global scope has no target
     assignment = psvc.assign_prompt(**assign_kwargs)
+
+    # Basic audit log
+    try:
+        print("[AUDIT] prompt_update", {
+            "by_admin": is_admin,
+            "user_id": str(getattr(current_user, "id", "")),
+            "analysis_id": str(analysis.id),
+            "scope": req.scope,
+            "prompt_id": str(created.id),
+            "parent_prompt_id": str(parent_id) if parent_id else None,
+        })
+    except Exception:
+        pass
 
     return UpdatePromptResponse(
         dry_run=False,

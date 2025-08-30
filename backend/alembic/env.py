@@ -7,6 +7,7 @@ from sqlalchemy import pool
 
 from alembic import context
 from dotenv import load_dotenv
+from urllib.parse import urlparse, urlunparse
 
 # Load environment variables
 load_dotenv()
@@ -18,15 +19,35 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 # access to the values within the .ini file in use.
 config = context.config
 
-# Set the database URL from environment
-database_url = os.getenv("DATABASE_URL")
-if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
-else:
-    # Default to local PostgreSQL for development
+def _resolve_db_url() -> str:
+    url = os.getenv("DATABASE_URL") or os.getenv("RAILWAY_DATABASE_URL") or os.getenv("POSTGRES_URL")
+    if url:
+        return url
+
+    host = os.getenv("PGHOST") or os.getenv("POSTGRES_HOST")
+    user = os.getenv("PGUSER") or os.getenv("POSTGRES_USER")
+    password = os.getenv("PGPASSWORD") or os.getenv("POSTGRES_PASSWORD")
+    dbname = os.getenv("PGDATABASE") or os.getenv("POSTGRES_DB") or os.getenv("POSTGRES_DATABASE") or "postgres"
+    port = os.getenv("PGPORT") or os.getenv("POSTGRES_PORT") or "5432"
+
+    if host and user and password:
+        base = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
+        try:
+            parsed = urlparse(base)
+            is_local = parsed.hostname in ("localhost", "127.0.0.1") or (parsed.hostname or "").endswith(".local")
+            query = parsed.query
+            if not is_local and "sslmode=" not in (query or ""):
+                query = (query + ("&" if query else "")) + "sslmode=require"
+            return urlunparse(parsed._replace(query=query))
+        except Exception:
+            return base
+
     default_url = "postgresql://postgres:dev@localhost:5432/comprehension_engine"
-    config.set_main_option("sqlalchemy.url", default_url)
     print(f"Warning: DATABASE_URL not set. Using default: {default_url}")
+    return default_url
+
+# Set the database URL from environment
+config.set_main_option("sqlalchemy.url", _resolve_db_url())
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
