@@ -39,6 +39,7 @@ from config import prompt_settings, app_settings
 from database import get_db, User, Conversation, ConversationTurn
 from database.connection import init_db
 from services import LearningAnalysisService
+from services import PromptService
 
 # Import API routes
 from api.auth_routes import router as auth_router
@@ -347,6 +348,20 @@ class LearningAnalysisDTO(BaseModel):
         from_attributes = True
 
 
+class UpdatePromptRequest(BaseModel):
+    analysis_id: UUID
+    scope: Literal["user", "global", "conversation"]
+    target_id: Optional[UUID] = None
+    dry_run: Optional[bool] = False
+
+
+class UpdatePromptResponse(BaseModel):
+    dry_run: bool
+    prompt: Dict[str, Any]
+    assignment: Dict[str, Any]
+    sql_preview: Optional[Dict[str, Any]] = None
+
+
 class ConversationUpdate(BaseModel):
     title: Optional[str] = None
     is_active: Optional[bool] = None
@@ -528,6 +543,91 @@ async def analyze_learning(req: AnalyzeRequest, db: Session = Depends(get_db), c
         connections=row.connections,
         prompt_suggestions=row.prompt_suggestions,
         created_at=created_iso,
+    )
+
+
+@app.post("/api/learning/update-prompt", response_model=UpdatePromptResponse)
+async def update_prompt(req: UpdatePromptRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not app_settings.adaptive_learning_enabled:
+        raise HTTPException(status_code=403, detail="Adaptive learning is disabled")
+
+    # Load analysis and verify ownership via conversation
+    from database.models import LearningAnalysis
+    analysis = db.query(LearningAnalysis).filter(LearningAnalysis.id == req.analysis_id).first()
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    convo = db.query(Conversation).filter(Conversation.id == analysis.conversation_id).first()
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversation not found for analysis")
+    if convo.user_id != current_user.id and req.scope != "global":
+        # Allow only owner to request user/conversation updates; global could be admin in future
+        raise HTTPException(status_code=403, detail="Forbidden: analysis does not belong to user")
+
+    # Base prompt: resolve current effective prompt for context
+    base_prompt = resolve_db_aware_prompt(task="chat", mode="text", user_id=current_user.id, conversation_id=convo.id)
+
+    # Ask LLM to propose improvements (placeholder deterministic output for tests)
+    improved = {
+        "improved_prompt": base_prompt + "\n\n# Improved: Emphasize brevity and analogy-first.",
+        "rationale": ["tighten voice-mode brevity", "explicit analogy→numeric→contrast pacing"],
+        "diff_bullets": [
+            "Emphasize analogy-first for new concepts",
+            "Insert micro numeric example requirement",
+            "Add end-of-voice-turn question rule",
+        ],
+    }
+
+    prompt_row = {
+        "name": f"adaptive_{req.scope}_v1",
+        "base_variant": None,
+        "content": improved["improved_prompt"],
+        "metadata": {
+            "analysis_id": str(analysis.id),
+            "rationale": improved["rationale"],
+            "diff_bullets": improved["diff_bullets"],
+        },
+        "scope": req.scope,
+    }
+
+    if req.dry_run:
+        return UpdatePromptResponse(
+            dry_run=True,
+            prompt=prompt_row,
+            assignment={"scope": req.scope, "target_id": str(req.target_id) if req.target_id else None},
+            sql_preview={
+                "insert_prompts": True,
+                "insert_assignment": True,
+            },
+        )
+
+    # Commit path: insert prompt and assignment
+    psvc = PromptService(db)
+    created = psvc.create_prompt(
+        name=prompt_row["name"],
+        content=prompt_row["content"],
+        scope=req.scope,
+        metadata=prompt_row["metadata"],
+        is_active=True,
+    )
+    # Determine assignment target
+    assign_kwargs: Dict[str, Any] = {"scope": req.scope, "prompt_id": created.id}
+    if req.scope == "user":
+        assign_kwargs["user_id"] = current_user.id if not req.target_id else req.target_id
+    elif req.scope == "conversation":
+        assign_kwargs["conversation_id"] = analysis.conversation_id if not req.target_id else req.target_id
+    # global scope has no target
+    assignment = psvc.assign_prompt(**assign_kwargs)
+
+    return UpdatePromptResponse(
+        dry_run=False,
+        prompt={"id": str(created.id), **prompt_row},
+        assignment={
+            "id": str(assignment.id),
+            "scope": assignment.scope,
+            "user_id": str(assignment.user_id) if assignment.user_id else None,
+            "conversation_id": str(assignment.conversation_id) if assignment.conversation_id else None,
+        },
+        sql_preview=None,
     )
 
 @app.post("/api/chat", response_model=ChatResponse)
