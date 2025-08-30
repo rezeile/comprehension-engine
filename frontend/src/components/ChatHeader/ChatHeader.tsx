@@ -21,7 +21,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
   return (
     <div className="chat-header">
       <h1>GraspWell</h1>
-      <p>Your learning companion</p>
+      <p>Master anything—faster and deeper.</p>
       
       {/* Left controls (settings & notices) */}
       <div className="voice-controls-header">

@@ -48,6 +48,30 @@ export class ConversationService {
     if (!res.ok) throw new Error(`Failed to update conversation (${res.status})`);
     return res.json();
   }
+
+  async deleteConversation(conversationId: string): Promise<void> {
+    const res = await fetch(`${this.backendUrl}/api/conversations/${conversationId}`, {
+      method: 'DELETE',
+      headers: this.authHeaders(),
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => 'Unknown error');
+      throw new Error(`Failed to delete conversation (${res.status}): ${errorText}`);
+    }
+  }
+
+  async deleteTurn(conversationId: string, turnId: string): Promise<void> {
+    const res = await fetch(`${this.backendUrl}/api/conversations/${conversationId}/turns/${turnId}`, {
+      method: 'DELETE',
+      headers: this.authHeaders(),
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => 'Unknown error');
+      throw new Error(`Failed to delete turn (${res.status}): ${errorText}`);
+    }
+  }
 }
 
 

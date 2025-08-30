@@ -69,11 +69,48 @@ export const useConversations = () => {
     }
   }, [conversationService]);
 
+  const deleteConversation = useCallback(async (id: string) => {
+    // Optimistic update: immediately remove from UI
+    const originalConversations = state.conversations;
+    setState(prev => ({
+      ...prev,
+      conversations: prev.conversations.filter(c => c.id !== id),
+      error: null
+    }));
+
+    try {
+      await conversationService.deleteConversation(id);
+      // Success! The optimistic update is kept
+    } catch (e) {
+      // Error: rollback the optimistic update
+      setState(prev => ({
+        ...prev,
+        conversations: originalConversations,
+        error: e instanceof Error ? e.message : 'Failed to delete conversation'
+      }));
+      throw e;
+    }
+  }, [conversationService, state.conversations]);
+
+  const deleteTurn = useCallback(async (conversationId: string, turnId: string) => {
+    try {
+      await conversationService.deleteTurn(conversationId, turnId);
+      // For now, just refresh the conversation list since we don't track individual turns here
+      // In the future, this could be optimized to update only the affected conversation
+      await refreshList();
+    } catch (e) {
+      setState(prev => ({ ...prev, error: e instanceof Error ? e.message : 'Failed to delete turn' }));
+      throw e;
+    }
+  }, [conversationService, refreshList]);
+
   return {
     ...state,
     refreshList,
     loadMore,
     renameConversation,
+    deleteConversation,
+    deleteTurn,
   };
 };
 

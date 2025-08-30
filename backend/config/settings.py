@@ -91,3 +91,38 @@ class PromptSettings:
 
 # Global settings instance
 prompt_settings = PromptSettings.from_env()
+
+
+class AppSettings:
+    """
+    Application-wide feature flags and settings for adaptive learning and DB-backed prompts.
+    """
+
+    @classmethod
+    def from_env(cls) -> 'AppSettings':
+        load_dotenv()
+        # Default ADAPTIVE_LEARNING_ENABLED to true in dev, false in production-like envs
+        is_production = (os.getenv("RAILWAY_ENVIRONMENT", "").lower() == "production") or \
+                        (os.getenv("ENV", "").lower() == "production")
+        adaptive_default = "false" if is_production else "true"
+        return cls(
+            prompts_from_db=(os.getenv("PROMPTS_FROM_DB", "false").lower() == "true"),
+            prompt_cache_ttl_seconds=int(os.getenv("PROMPT_CACHE_TTL_SECONDS", "300")),
+            adaptive_learning_enabled=(os.getenv("ADAPTIVE_LEARNING_ENABLED", adaptive_default).lower() == "true"),
+        )
+
+    def __init__(self, prompts_from_db: bool, prompt_cache_ttl_seconds: int, adaptive_learning_enabled: bool):
+        self.prompts_from_db = prompts_from_db
+        self.prompt_cache_ttl_seconds = prompt_cache_ttl_seconds
+        self.adaptive_learning_enabled = adaptive_learning_enabled
+
+    def get_feature_flags_summary(self) -> Dict[str, Any]:
+        return {
+            "PROMPTS_FROM_DB": self.prompts_from_db,
+            "PROMPT_CACHE_TTL_SECONDS": self.prompt_cache_ttl_seconds,
+            "ADAPTIVE_LEARNING_ENABLED": self.adaptive_learning_enabled,
+        }
+
+
+# Global app settings instance
+app_settings = AppSettings.from_env()

@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import './HistoryDrawer.css';
 import SlidePanel from '../SlidePanel/SlidePanel';
 import { ConversationSummary } from '../../types/conversation.types';
+import { TrashIcon } from '../Icons';
 
 interface HistoryDrawerProps {
   isOpen: boolean;
@@ -13,6 +14,7 @@ interface HistoryDrawerProps {
   hasMore: boolean;
   onSelect: (id: string) => void;
   onRename?: (id: string, newTitle: string) => Promise<void> | void;
+  onDelete?: (id: string) => Promise<void> | void;
 }
 
 const fallbackTitle = (c: ConversationSummary) => c.title?.trim() || 'New Chat';
@@ -27,9 +29,12 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
   hasMore,
   onSelect,
   onRename,
+  onDelete,
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState<string>('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
   const containerClass = useMemo(() => 'history-drawer', []);
 
@@ -46,6 +51,48 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
       await onRename(id, value);
     } catch {}
   };
+
+  const handleDeleteClick = (id: string) => {
+    setShowDeleteConfirm(id);
+  };
+
+  const handleDeleteConfirm = useCallback(async (id: string) => {
+    if (!onDelete || deletingId) return; // Prevent multiple calls
+    
+    setShowDeleteConfirm(null);
+    setDeletingId(id);
+    
+    try {
+      await onDelete(id);
+    } catch (error) {
+      console.error('Failed to delete conversation:', error);
+      // Error will be handled by parent component via optimistic UI rollback
+    } finally {
+      setDeletingId(null);
+    }
+  }, [onDelete, deletingId]);
+
+  const handleDeleteCancel = useCallback(() => {
+    setShowDeleteConfirm(null);
+  }, []);
+
+  // Handle keyboard events for delete confirmation modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!showDeleteConfirm) return;
+      
+      if (e.key === 'Escape') {
+        handleDeleteCancel();
+      } else if (e.key === 'Enter') {
+        handleDeleteConfirm(showDeleteConfirm);
+      }
+    };
+
+    if (showDeleteConfirm) {
+      document.addEventListener('keydown', handleKeyDown);
+      return () => document.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [showDeleteConfirm, handleDeleteCancel, handleDeleteConfirm]);
 
   return (
     <SlidePanel isOpen={isOpen} onClose={onClose} title="History" id="history-drawer">
@@ -73,8 +120,30 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
                 <div className="history-item-meta">{c.updated_at ? new Date(c.updated_at).toLocaleString() : ''}</div>
               </button>
             )}
-            {onRename && editingId !== c.id && (
-              <button className="rename-btn" aria-label="Rename conversation" onClick={() => handleStartEdit(c)}>✎</button>
+            {editingId !== c.id && (
+              <div className="history-item-actions">
+                {onRename && (
+                  <button 
+                    className="rename-btn" 
+                    aria-label="Rename conversation" 
+                    title="Rename conversation"
+                    onClick={() => handleStartEdit(c)}
+                  >
+                    ✎
+                  </button>
+                )}
+                {onDelete && (
+                  <button 
+                    className="delete-btn"
+                    aria-label="Delete conversation"
+                    title="Delete conversation"
+                    onClick={() => handleDeleteClick(c.id)}
+                    disabled={deletingId === c.id}
+                  >
+                    <TrashIcon width={16} height={16} />
+                  </button>
+                )}
+              </div>
             )}
           </div>
         ))}
@@ -87,6 +156,43 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
           <div className="history-empty">No conversations yet. Start a New Chat to begin!</div>
         )}
       </div>
+
+      {/* Delete confirmation modal */}
+      {showDeleteConfirm && (
+        <div 
+          className="delete-confirmation-backdrop" 
+          onClick={handleDeleteCancel}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-modal-title"
+          aria-describedby="delete-modal-description"
+        >
+          <div className="delete-confirmation-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 id="delete-modal-title">Delete Conversation</h3>
+            <p id="delete-modal-description">
+              Are you sure you want to delete this conversation? This action cannot be undone.
+            </p>
+            <div className="delete-confirmation-actions">
+              <button 
+                className="cancel-btn" 
+                onClick={handleDeleteCancel}
+                autoFocus
+                aria-label="Cancel deletion"
+              >
+                Cancel
+              </button>
+              <button 
+                className="confirm-delete-btn" 
+                onClick={() => handleDeleteConfirm(showDeleteConfirm)}
+                disabled={!!deletingId}
+                aria-label="Confirm deletion"
+              >
+                {deletingId ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </SlidePanel>
   );
 };

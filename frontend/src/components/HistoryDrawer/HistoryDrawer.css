@@ -24,8 +24,8 @@
 
 .history-item {
   display: grid;
-  grid-template-columns: 1fr 28px; /* reserve space equal to edit button width */
-  gap: 0.5rem; /* increased separation between entry and edit button */
+  grid-template-columns: 1fr auto; /* auto-size for action buttons */
+  gap: 0.5rem; /* increased separation between entry and action buttons */
   align-items: center;
   margin-bottom: 0.5rem; /* doubled spacing between entries */
 }
@@ -49,20 +49,50 @@
 .history-item-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .history-item-meta { font-size: 0.75rem; opacity: 0.75; }
 
-.rename-btn {
+.history-item-actions {
+  display: flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.rename-btn, .delete-btn {
   background: transparent;
   color: var(--text-primary);
-  border: none;
+  border: 1px solid transparent;
   cursor: pointer;
   padding: 0.25rem;
-  margin-right: 0.25rem; /* slight separation from right edge */
-  font-size: 18px; /* increased icon size */
+  font-size: 14px;
   line-height: 1;
   width: 28px;
   height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.rename-btn:hover, .delete-btn:hover {
+  background: var(--inline-code-bg);
+  border-color: var(--border-subtle);
+}
+
+.delete-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.delete-btn:disabled:hover {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-primary);
 }
 
 .rename-input {
@@ -78,6 +108,101 @@
 }
 
 .history-loading, .history-empty { color: var(--text-primary); opacity: 0.8; text-align: center; padding: 0.75rem 0; }
+
+/* Delete confirmation modal */
+.delete-confirmation-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.delete-confirmation-modal {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-width: 400px;
+  width: 90vw;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  animation: modalSlideIn 0.2s ease-out;
+}
+
+.delete-confirmation-modal h3 {
+  margin: 0 0 0.75rem 0;
+  color: var(--text-primary);
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.delete-confirmation-modal p {
+  margin: 0 0 1.5rem 0;
+  color: var(--text-primary);
+  opacity: 0.8;
+  line-height: 1.5;
+}
+
+.delete-confirmation-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.cancel-btn, .confirm-delete-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid;
+}
+
+.cancel-btn {
+  background: transparent;
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+
+.cancel-btn:hover {
+  background: var(--inline-code-bg);
+}
+
+.confirm-delete-btn {
+  background: #ef4444;
+  color: white;
+  border-color: #ef4444;
+}
+
+.confirm-delete-btn:hover:not(:disabled) {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.confirm-delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #9ca3af;
+  border-color: #9ca3af;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
 @media (max-width: 1024px) {
   .history-drawer { width: 85vw; }

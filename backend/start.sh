@@ -9,6 +9,10 @@ if [ -f "requirements.txt" ]; then
     pip install -r requirements.txt
 fi
 
+# Run database migrations
+echo "Running database migrations..."
+alembic upgrade head
+
 # Start the FastAPI server
 echo "Starting Comprehension Engine Backend..."
 echo "API will be available at: http://localhost:8000"

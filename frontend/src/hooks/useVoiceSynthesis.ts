@@ -550,6 +550,7 @@ export const useVoiceSynthesis = (options: VoiceSynthesisOptions = {}) => {
       voiceId?: string,
       abortSignal?: AbortSignal,
       conversationId?: string,
+      startNew?: boolean,
     ) => {
       const audio = ensureAudioEl();
       // Stay in "Thinking..." until audio actually starts playing
@@ -563,6 +564,7 @@ export const useVoiceSynthesis = (options: VoiceSynthesisOptions = {}) => {
         abortSignal,
         conversationId,
         voiceId,
+        startNew,
       );
       return returnedConvoId;
     },

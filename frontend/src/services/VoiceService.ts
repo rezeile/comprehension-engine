@@ -27,14 +27,17 @@ export class VoiceService {
     abortSignal?: AbortSignal,
     conversationId?: string,
     voiceId?: string,
+    startNew?: boolean,
   ): Promise<string | undefined> {
     const ttsDebug = process.env.REACT_APP_TTS_TIMING_DEBUG === 'true';
     const t0 = Date.now();
     const accessToken = localStorage.getItem('access_token');
+    const includeConversationId = conversationId && conversationId !== 'new';
     const body = {
       message,
       conversation_history: conversationHistory,
-      ...(conversationId ? { conversation_id: conversationId } : {}),
+      ...(includeConversationId ? { conversation_id: conversationId } : {}),
+      ...(startNew ? { start_new: true } : {}),
       mode: 'voice',
     };
     const headers: Record<string, string> = {

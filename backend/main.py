@@ -1,13 +1,14 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from starlette.middleware.sessions import SessionMiddleware
 try:
     from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 except ImportError:
     ProxyHeadersMiddleware = None  # Optional; skip if unavailable
 from pydantic import BaseModel
+import subprocess
 from typing import List, Optional, Literal, Dict, Any
 from datetime import datetime, date
 from uuid import UUID
@@ -31,11 +32,13 @@ except Exception:
 
 # Import our new prompt management system
 from prompts import prompt_manager
-from config import prompt_settings
+from prompts.prompt_manager import get_prompt as resolve_db_aware_prompt
+from config import prompt_settings, app_settings
 
 # Import database components
 from database import get_db, User, Conversation, ConversationTurn
 from database.connection import init_db
+from services import LearningAnalysisService
 
 # Import API routes
 from api.auth_routes import router as auth_router
@@ -63,12 +66,33 @@ else:
 # Initialize database on startup
 @app.on_event("startup")
 async def startup_event():
+    """Run database migrations and initialize database on startup."""
+    # Run migrations in production
+    if os.getenv("RAILWAY_ENVIRONMENT") == "production":
+        print("Running database migrations...")
+        try:
+            result = subprocess.run(["alembic", "upgrade", "head"], 
+                                  capture_output=True, text=True, check=True)
+            print(f"Migrations completed successfully: {result.stdout}")
+        except subprocess.CalledProcessError as e:
+            print(f"Migration failed: {e.stderr}")
+            # Don't fail startup - let the app start anyway
+        except Exception as e:
+            print(f"Unexpected error during migration: {e}")
+    
+    # Initialize database
     try:
         init_db()
         print("Database initialized successfully")
     except Exception as e:
         print(f"Database initialization failed: {e}")
         # Don't fail startup, allow API to run even if DB is down
+    # Log feature flags summary
+    try:
+        flags = app_settings.get_feature_flags_summary()
+        print(f"Feature flags: {flags}")
+    except Exception as e:
+        print(f"Failed to load feature flags: {e}")
 
 # Session middleware for OAuth (must be added before other middleware)
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production")
@@ -86,7 +110,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],  # Include PATCH for updates
     allow_headers=["*"],  # Allow all headers
-    expose_headers=["*"],  # Expose all headers
+    # Explicitly expose the conversation id header used by /api/voice_chat
+    expose_headers=["X-Conversation-Id", "X-Audio-Format", "*"],
     max_age=86400,  # Cache preflight requests for 24 hours
 )
 
@@ -301,6 +326,27 @@ class ConversationTurnResponse(BaseModel):
         from_attributes = True
 
 
+# ---- Adaptive Learning: Analyze endpoint ----
+class AnalyzeRequest(BaseModel):
+    conversation_id: UUID
+    dry_run: Optional[bool] = False
+
+
+class LearningAnalysisDTO(BaseModel):
+    id: Optional[UUID] = None
+    user_id: UUID
+    conversation_id: UUID
+    transcript: List[Dict[str, Any]]
+    features: Dict[str, Any]
+    highlights: Optional[List[Dict[str, Any]]] = None
+    connections: Optional[List[Dict[str, Any]]] = None
+    prompt_suggestions: Optional[Dict[str, Any]] = None
+    created_at: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class ConversationUpdate(BaseModel):
     title: Optional[str] = None
     is_active: Optional[bool] = None
@@ -431,6 +477,59 @@ async def text_to_speech(request: TTSRequest):
         print(f"ElevenLabs TTS error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"TTS generation failed: {str(e)}")
 
+
+@app.post("/api/learning/analyze", response_model=LearningAnalysisDTO)
+async def analyze_learning(req: AnalyzeRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not app_settings.adaptive_learning_enabled:
+        raise HTTPException(status_code=403, detail="Adaptive learning is disabled")
+    # Ownership check
+    convo = db.query(Conversation).filter(Conversation.id == req.conversation_id).first()
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if convo.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Forbidden: conversation does not belong to user")
+
+    svc = LearningAnalysisService(db)
+    transcript = svc.get_voice_transcript(req.conversation_id)
+    features = svc.analyze_transcript(transcript)
+
+    # Basic validation: must include keys
+    if not isinstance(features, dict) or "learning_style_patterns" not in features:
+        raise HTTPException(status_code=422, detail="Invalid analysis JSON")
+
+    if req.dry_run:
+        return LearningAnalysisDTO(
+            id=None,
+            user_id=current_user.id,
+            conversation_id=req.conversation_id,
+            transcript=transcript,
+            features=features,
+        )
+
+    row = svc.persist_analysis(
+        user_id=current_user.id,
+        conversation_id=req.conversation_id,
+        transcript=transcript,
+        features=features,
+    )
+    # Convert created_at to iso if needed
+    created_iso: Optional[str] = None
+    try:
+        created_iso = row.created_at.isoformat() if getattr(row, "created_at", None) else None
+    except Exception:
+        created_iso = None
+    return LearningAnalysisDTO(
+        id=row.id,
+        user_id=row.user_id,
+        conversation_id=row.conversation_id,
+        transcript=row.transcript,
+        features=row.features,
+        highlights=row.highlights,
+        connections=row.connections,
+        prompt_suggestions=row.prompt_suggestions,
+        created_at=created_iso,
+    )
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:
@@ -508,7 +607,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user
         messages.append({"role": "user", "content": user_text})
         
         # Get system prompt from prompt manager with task/mode composition
-        system_prompt = prompt_manager.get_prompt(task="chat", mode=request.mode or "text")
+        system_prompt = resolve_db_aware_prompt(task="chat", mode=request.mode or "text", user_id=getattr(current_user, 'id', None), conversation_id=request.conversation_id, db=db)
         # Append an explicit enforcement line for voice mode to reduce verbosity further
         if (request.mode or "text") == "voice":
             system_prompt = (
@@ -560,7 +659,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user
         # Extract the response content
         ai_response = response.content[0].text if response.content else "I apologize, but I couldn't generate a response at this time."
 
-        # Persist conversation/turn if authenticated
+        # Persist conversation/turn if authenticated - lazy conversation creation
         conversation_id_str: Optional[str] = None
         try:
             if current_user:
@@ -568,12 +667,10 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user
 
                 conversation = None
 
-                # Determine conversation handling based on request
+                # Determine conversation handling based on request (lazy creation)
                 if request.start_new:
-                    conversation = Conversation(user_id=current_user.id, title="New Conversation")
-                    db.add(conversation)
-                    db.commit()
-                    db.refresh(conversation)
+                    # Create new conversation only when persisting the first turn
+                    pass  # conversation remains None, will be created below
                 elif request.conversation_id:
                     conversation = (
                         db.query(Conversation)
@@ -585,18 +682,20 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user
                     if conversation.user_id != current_user.id:
                         raise HTTPException(status_code=403, detail="Forbidden: conversation does not belong to user")
                 else:
-                    # Fallback to latest active conversation (simple strategy)
+                    # Try to find latest active conversation, but don't create one yet
                     conversation = (
                         db.query(Conversation)
                         .filter(Conversation.user_id == current_user.id, Conversation.is_active == True)
                         .order_by(Conversation.created_at.desc())
                         .first()
                     )
-                    if not conversation:
-                        conversation = Conversation(user_id=current_user.id, title="New Conversation")
-                        db.add(conversation)
-                        db.commit()
-                        db.refresh(conversation)
+                    # Don't create conversation here - let it be created below when persisting turn
+
+                # Create conversation lazily if none exists (within the same transaction as the turn)
+                if conversation is None:
+                    conversation = Conversation(user_id=current_user.id, title="New Conversation")
+                    db.add(conversation)
+                    db.flush()  # Flush to get the ID but don't commit yet
 
                 # Determine next turn number
                 last_turn = (
@@ -619,7 +718,7 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db), current_user
                     attachments=request.attachments if request.attachments else None,
                 )
                 db.add(turn)
-                db.commit()
+                db.commit()  # Commit both conversation and turn together
                 db.refresh(turn)
                 conversation_id_str = str(conversation.id)
 
@@ -787,7 +886,8 @@ async def chat_stream(request: ChatRequest, current_user: User = Depends(get_cur
             messages.append({"role": "user", "content": request.message})
 
             # Compose system prompt similar to /api/chat
-            system_prompt = prompt_manager.get_prompt(task="chat", mode=request.mode or "text")
+            system_prompt = resolve_db_aware_prompt(task="chat", mode=request.mode or "text", user_id=getattr(current_user, 'id', None), conversation_id=request.conversation_id)
+            system_prompt = resolve_db_aware_prompt(task="chat", mode=request.mode or "text", user_id=getattr(current_user, 'id', None), conversation_id=request.conversation_id)
             if (request.mode or "text") == "voice":
                 system_prompt = (
                     "MODE=VOICE ENFORCEMENT\n"
@@ -860,16 +960,12 @@ async def voice_chat(
     if selected_voice not in valid_voice_ids:
         raise HTTPException(status_code=400, detail="Invalid voice ID")
 
-    # Resolve conversation (create or reuse) BEFORE starting the stream so we can place it in headers
+    # Conversation resolution - lazy creation; only create once we have content
     conversation = None
     header_convo_id = None
     try:
-        if request.start_new:
-            conversation = Conversation(user_id=current_user.id, title="New Conversation")
-            db.add(conversation)
-            db.commit()
-            db.refresh(conversation)
-        elif request.conversation_id:
+        if request.conversation_id:
+            # Verify existing conversation
             conversation = (
                 db.query(Conversation)
                 .filter(Conversation.id == request.conversation_id)
@@ -879,22 +975,23 @@ async def voice_chat(
                 raise HTTPException(status_code=404, detail="Conversation not found")
             if conversation.user_id != current_user.id:
                 raise HTTPException(status_code=403, detail="Forbidden: conversation does not belong to user")
-        else:
-            # Latest active or new
+            header_convo_id = str(conversation.id)
+        elif not request.start_new:
+            # Try to find latest active conversation for potential reuse
             conversation = (
                 db.query(Conversation)
                 .filter(Conversation.user_id == current_user.id, Conversation.is_active == True)
                 .order_by(Conversation.created_at.desc())
                 .first()
             )
-            if not conversation:
-                conversation = Conversation(user_id=current_user.id, title="New Conversation")
-                db.add(conversation)
-                db.commit()
-                db.refresh(conversation)
-        header_convo_id = str(conversation.id)
+            if conversation:
+                header_convo_id = str(conversation.id)
+        
+        # Do not create conversation yet; defer until we have content to persist
+        
     except Exception as e:
-        print(f"voice_chat: pre-resolution failed: {e}")
+        print(f"voice_chat: conversation resolution failed: {e}")
+        # Continue with lazy creation later when content is available
         conversation = None
         header_convo_id = None
 
@@ -913,8 +1010,9 @@ async def voice_chat(
 
     def audio_stream():
         try:
+            nonlocal conversation, header_convo_id
             start_time = perf_counter()
-            conversation_id_str: Optional[str] = str(conversation.id) if conversation else None
+            # Note: conversation might be None initially (lazy creation)
 
             # Build messages similar to /api/chat/stream
             messages: List[dict] = []
@@ -973,7 +1071,20 @@ async def voice_chat(
                                     break
                                 sentence = m.group(1)
                                 buffer = buffer[m.end():]
+                                if assistant_text and not assistant_text.endswith(" "):
+                                    assistant_text += " "
                                 assistant_text += sentence
+                                # Lazy create conversation upon first output
+                                if conversation is None:
+                                    try:
+                                        convo = Conversation(user_id=current_user.id, title="New Conversation")
+                                        db.add(convo)
+                                        db.commit()
+                                        db.refresh(convo)
+                                        conversation = convo
+                                        header_convo_id = str(conversation.id)
+                                    except Exception as ce:
+                                        print(f"voice_chat: failed to create conversation lazily: {ce}")
                                 # Stream TTS for this sentence
                                 try:
                                     latency = int(os.getenv("ELEVENLABS_STREAM_LATENCY", "1"))
@@ -1006,7 +1117,20 @@ async def voice_chat(
 
             # Flush any remaining buffer
             if buffer.strip():
+                if assistant_text and not assistant_text.endswith(" ") and not buffer.startswith(" "):
+                    assistant_text += " "
                 assistant_text += buffer
+                # Lazy create if still None
+                if conversation is None:
+                    try:
+                        convo = Conversation(user_id=current_user.id, title="New Conversation")
+                        db.add(convo)
+                        db.commit()
+                        db.refresh(convo)
+                        conversation = convo
+                        header_convo_id = str(conversation.id)
+                    except Exception as ce:
+                        print(f"voice_chat: failed to create conversation on flush: {ce}")
                 try:
                     latency = int(os.getenv("ELEVENLABS_STREAM_LATENCY", "1"))
                     chunk_size = int(os.getenv("ELEVENLABS_STREAM_CHUNK_SIZE", "2048"))
@@ -1029,9 +1153,9 @@ async def voice_chat(
                     )
                     if audio_bytes:
                         yield audio_bytes
-            # Persist turn at the end if we resolved a conversation
+            # Persist turn if we have content (conversation already exists)
             try:
-                if conversation_id_str is not None:
+                if assistant_text.strip() and conversation is not None:  # Only persist if we have actual content and conversation
                     # Determine next turn number
                     last_turn = (
                         db.query(ConversationTurn)
@@ -1050,9 +1174,13 @@ async def voice_chat(
                         voice_used=voice_id or os.getenv("ELEVENLABS_DEFAULT_VOICE", "21m00Tcm4TlvDq8ikWAM"),
                     )
                     db.add(turn)
-                    db.commit()
+                    db.commit()  # Commit the turn
             except Exception as persist_err:
                 print(f"voice_chat: failed to persist turn: {persist_err}")
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
 
         except Exception as e:
             # Log and end stream gracefully
@@ -1255,6 +1383,97 @@ async def list_conversation_turns(conversation_id: UUID, limit: int = 50, offset
         print(f"Failed to list conversation turns: {e}")
         raise HTTPException(status_code=500, detail="Failed to list conversation turns")
 
+
+@app.delete("/api/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """
+    Delete a conversation and all its turns.
+    
+    Verifies that the conversation exists and belongs to the current user
+    before deletion. Cascading delete removes all turns automatically.
+    """
+    try:
+        from database.models import Conversation
+        
+        # Verify conversation exists and belongs to current user
+        conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        if conversation.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Forbidden: conversation does not belong to user")
+        
+        # Delete conversation (turns are cascaded automatically via FK constraint)
+        db.delete(conversation)
+        db.commit()
+        
+        # Return 204 No Content for successful deletion
+        return Response(status_code=204)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Failed to delete conversation: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to delete conversation")
+
+
+@app.delete("/api/conversations/{conversation_id}/turns/{turn_id}")
+async def delete_conversation_turn(conversation_id: UUID, turn_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """
+    Delete a specific conversation turn.
+    
+    Verifies that both the conversation and turn exist, that the conversation
+    belongs to the current user, and that the turn belongs to the conversation.
+    If this is the last turn in the conversation, the conversation is also deleted.
+    """
+    try:
+        from database.models import Conversation, ConversationTurn
+        from sqlalchemy.sql import func
+        
+        # Verify conversation exists and belongs to current user
+        conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        if conversation.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Forbidden: conversation does not belong to user")
+        
+        # Verify turn exists and belongs to the conversation
+        turn = db.query(ConversationTurn).filter(
+            ConversationTurn.id == turn_id,
+            ConversationTurn.conversation_id == conversation_id
+        ).first()
+        if not turn:
+            raise HTTPException(status_code=404, detail="Turn not found")
+        
+        # Delete the turn
+        db.delete(turn)
+        
+        # Update conversation's updated_at timestamp
+        conversation.updated_at = func.now()
+        db.add(conversation)
+        
+        # Check if this was the last turn in the conversation
+        remaining_turns = db.query(ConversationTurn).filter(
+            ConversationTurn.conversation_id == conversation_id,
+            ConversationTurn.id != turn_id
+        ).count()
+        
+        if remaining_turns == 0:
+            # Delete the conversation if no turns remain
+            db.delete(conversation)
+        
+        db.commit()
+        
+        # Return 204 No Content for successful deletion
+        return Response(status_code=204)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Failed to delete conversation turn: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to delete conversation turn")
+
 @app.get("/api/cors-test")
 async def cors_test():
     """Test endpoint to verify CORS is working"""
@@ -1319,6 +1538,7 @@ async def get_prompt_status():
             "total_variants": len(prompt_manager.list_variants()),
             "available_variants": prompt_manager.list_variants(),
             "config": prompt_settings.get_config_summary(),
+            "features": app_settings.get_feature_flags_summary(),
             "status": "success"
         }
     except Exception as e:

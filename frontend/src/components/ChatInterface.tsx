@@ -316,7 +316,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
   // History drawer state
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
   
-  const { conversations, isLoading: isHistoryLoading, error: historyError, hasMore, loadMore, renameConversation, refreshList } = useConversations();
+  const { conversations, isLoading: isHistoryLoading, error: historyError, hasMore, loadMore, renameConversation, deleteConversation, refreshList } = useConversations();
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -506,7 +506,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
         try { await unlockAudio(); } catch {}
         try {
           awaitingSpeechStartRef.current = true;
-          returnedConversationId = await streamVoiceChat(messageToSend, history, selectedVoice, undefined, conversationId);
+          // Determine if this should start a new conversation (no id or id === 'new')
+          const shouldStartNew = !conversationId || conversationId === 'new';
+          returnedConversationId = await streamVoiceChat(
+            messageToSend,
+            history,
+            selectedVoice,
+            undefined,
+            conversationId,
+            shouldStartNew
+          );
         } catch (e) {
           console.error('voice_chat stream failed', e);
           // If streaming fails, clear awaiting flag so STT can resume
@@ -519,15 +528,30 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
       if (returnedConversationId && returnedConversationId !== conversationId) {
         navigate(`/c/${returnedConversationId}`);
       }
-      // Proactively refresh turns so the new voice response appears without a full refresh
-      try {
-        const convoId = returnedConversationId || conversationId;
-        if (convoId && convoId !== 'new') {
-          const turns = await conversationService.listTurns(convoId, 200, 0);
-          hydrateFromTurns(turns);
+      // Only hydrate from server after send when in voice mode.
+      // In text mode, the hook already updates the message list; hydrating would
+      // briefly replace it and make the just-sent bubble appear to disappear.
+      if (isVoiceMode) {
+        try {
+          let convoId = returnedConversationId || conversationId;
+          // Fallback: if no ID was returned and we started a new voice convo, pick the latest conversation
+          if ((!convoId || convoId === 'new') && (!conversationId || conversationId === 'new')) {
+            try {
+              const summaries = await conversationService.listConversations(1, 0);
+              if (summaries && summaries.length > 0) {
+                convoId = summaries[0].id;
+                // Navigate to it so URL matches persisted convo
+                navigate(`/c/${convoId}`);
+              }
+            } catch {}
+          }
+          if (convoId && convoId !== 'new') {
+            const turns = await conversationService.listTurns(convoId, 200, 0);
+            hydrateFromTurns(turns);
+          }
+        } catch (e) {
+          console.error('post-stream hydrate failed', e);
         }
-      } catch (e) {
-        console.error('post-stream hydrate failed', e);
       }
     } catch (error) {
       console.error('Error sending message:', error);
@@ -579,6 +603,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
           hasMore={hasMore}
           onSelect={(id) => { navigate(`/c/${id}`); }}
           onRename={async (id, title) => { await renameConversation(id, title); await refreshList(); }}
+          onDelete={async (id) => { 
+            await deleteConversation(id); 
+            // Check if we're currently viewing the deleted conversation
+            if (conversationId === id) {
+              navigate('/');
+            }
+          }}
         />
 
         {/* Main content area */}
@@ -591,6 +622,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
             isLoading={isLoading || isSendingMessage}
             onExit={exitVoiceMode}
             onSendMessage={() => handleSendMessage()}
+            selectedVoice={selectedVoice}
+            voices={availableVoices}
           />
         ) : (
           // Normal chat view (or when overlay is active, we hide messages/input below via blur)
@@ -635,6 +668,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
           onSendMessage={() => handleSendMessage()}
           overlay={true}
           contextMessages={messages.slice(-2)}
+          selectedVoice={selectedVoice}
+          voices={availableVoices}
         />
       )}
 

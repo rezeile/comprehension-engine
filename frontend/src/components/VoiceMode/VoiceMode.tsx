@@ -5,6 +5,7 @@ import VoiceModeControls from './VoiceModeControls';
 import AssistantBlock from '../ChatMessages/AssistantBlock';
 import UserChip from '../ChatMessages/UserChip';
 import { Message } from '../../types/chat.types';
+import { Voice } from '../../services/VoiceService';
 import './VoiceMode.css';
 
 interface VoiceModeProps {
@@ -16,7 +17,8 @@ interface VoiceModeProps {
   onSendMessage: () => void;
   overlay?: boolean;
   contextMessages?: Message[];
-  
+  selectedVoice: string;
+  voices: Voice[];
 }
 
 const VoiceMode: React.FC<VoiceModeProps> = ({
@@ -28,7 +30,8 @@ const VoiceMode: React.FC<VoiceModeProps> = ({
   onSendMessage,
   overlay = false,
   contextMessages = [],
-  
+  selectedVoice,
+  voices
 }) => {
   return (
     <div className={`voice-mode-interface${overlay ? ' voice-overlay' : ''}`}>
@@ -52,6 +55,8 @@ const VoiceMode: React.FC<VoiceModeProps> = ({
           isSpeaking={isSpeaking}
           isRecording={isRecording}
           isLoading={isLoading}
+          selectedVoice={selectedVoice}
+          voices={voices}
         />
       </div>
       
