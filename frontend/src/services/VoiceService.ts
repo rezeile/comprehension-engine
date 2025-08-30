@@ -277,7 +277,7 @@ export class VoiceService {
    * Get default voice ID
    */
   getDefaultVoiceId(): string {
-    return process.env.REACT_APP_DEFAULT_VOICE_ID || 'ErXwobaYiN019PkySvjV';
+    return process.env.REACT_APP_DEFAULT_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
   }
   
   /**

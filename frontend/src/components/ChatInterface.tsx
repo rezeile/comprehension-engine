@@ -282,7 +282,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ conversationId }) => {
   } = useAudioState();
   
   // ElevenLabs voice state
-  const [selectedVoice, setSelectedVoice] = useState<string>('ErXwobaYiN019PkySvjV'); // Default to Antoni
+  const [selectedVoice, setSelectedVoice] = useState<string>(process.env.REACT_APP_DEFAULT_VOICE_ID || '21m00Tcm4TlvDq8ikWAM'); // Default to Rachel
   const [availableVoices, setAvailableVoices] = useState<Voice[]>([]);
   
   // Settings panel state
